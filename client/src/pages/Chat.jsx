@@ -101,8 +101,8 @@ export default function Chat() {
             <header className="conversation-header">
               <span>{activeUser.username}</span>
               <CallWindow
-              currentUserid={me.id}
-              targetUserid={activeUser.id}
+              currentUserId={me.id}
+              targetUserId={activeUser.id}
               targetName={activeUser.username}
              />
              </header> 
