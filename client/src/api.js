@@ -22,4 +22,19 @@ export const api = {
     request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   getUsers: () => request("/auth/users"),
   getHistory: (otherUserId) => request(`/messages/${otherUserId}`),
+  // File upload can't use the JSON `request` helper above since it needs
+  // multipart/form-data, not a JSON body.
+  uploadFile: async (file) => {
+    const token = localStorage.getItem("token");
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE_URL}/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload failed");
+    return data;
+  },
 };

@@ -1,12 +1,17 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 import { createServer } from "http";
 import { Server } from "socket.io";
 
 import authRoutes from "./routes/auth.js";
 import messageRoutes from "./routes/messages.js";
+import uploadRoutes from "./routes/upload.js";
 import { setupChatSocket } from "./sockets/chat.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const httpServer = createServer(app);
@@ -24,6 +29,10 @@ app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/upload", uploadRoutes);
+
+// Serves whatever's in server/uploads/ so the client can load shared images/files directly.
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 setupChatSocket(io);
 

@@ -4,6 +4,44 @@ import { api } from "../api.js";
 import { connectSocket, getSocket } from "../socket.js";
 import CallWindow from"../CallWindow";
 
+const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
+
+// Uploaded files come back as a server-relative path like "/uploads/xyz.png" —
+// this makes it an absolute URL the <img>/<a> tags can actually load.
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
+const toAbsoluteUrl = (relativeUrl) => `${SERVER_URL}${relativeUrl}`;
+
+// Text/sticker messages store their content as a plain string; image/file
+// messages store it as JSON ({ url, filename }) since they need both.
+function renderMessageContent(message) {
+  if (message.type !== "image" && message.type !== "file") {
+    return message.content;
+  }
+
+  let url, filename;
+  try {
+    ({ url, filename } = JSON.parse(message.content));
+  } catch {
+    return "[Attachment unavailable]";
+  }
+
+  const fullUrl = toAbsoluteUrl(url);
+
+  if (message.type === "image") {
+    return (
+      <a href={fullUrl} target="_blank" rel="noreferrer">
+        <img src={fullUrl} alt={filename || "shared image"} className="shared-image" />
+      </a>
+    );
+  }
+
+  return (
+    <a href={fullUrl} target="_blank" rel="noreferrer" className="shared-file">
+      📎 {filename || "Download file"}
+    </a>
+  );
+}
+
 export default function Chat() {
   const me = JSON.parse(localStorage.getItem("user"));
   const navigate = useNavigate();
@@ -13,7 +51,10 @@ export default function Chat() {
   const [activeUser, setActiveUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
+  const [showStickers, setShowStickers] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const bottomRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Connect socket once on mount
   useEffect(() => {
@@ -22,13 +63,25 @@ export default function Chat() {
     socket.on("presence:update", (ids) => setOnlineIds(ids));
 
     socket.on("message:new", (msg) => {
-      setMessages((prev) => {
-        // Only append if it belongs to the currently open conversation
-        const belongsToOpenChat =
-          activeUserRef.current &&
-          (msg.sender_id === activeUserRef.current.id || msg.receiver_id === activeUserRef.current.id);
-        return belongsToOpenChat ? [...prev, msg] : prev;
-      });
+      const openUser = activeUserRef.current;
+      const belongsToOpenChat =
+        openUser && (msg.sender_id === openUser.id || msg.receiver_id === openUser.id);
+
+      setMessages((prev) => (belongsToOpenChat ? [...prev, msg] : prev));
+
+      // If the message just arrived from the person we're actively looking
+      // at, mark it seen right away instead of waiting for a chat switch.
+      if (belongsToOpenChat && msg.sender_id === openUser.id) {
+        socket.emit("message:seen", { otherUserId: openUser.id });
+      }
+    });
+
+    socket.on("message:seen", ({ byUserId }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.sender_id === me.id && m.receiver_id === byUserId ? { ...m, seen: true } : m
+        )
+      );
     });
 
     api.getUsers().then((all) => setUsers(all.filter((u) => u.id !== me.id)));
@@ -45,7 +98,12 @@ export default function Chat() {
 
   useEffect(() => {
     if (!activeUser) return;
-    api.getHistory(activeUser.id).then(setMessages);
+    setShowStickers(false);
+    api.getHistory(activeUser.id).then((history) => {
+      setMessages(history);
+      // Opening the conversation counts as seeing whatever they've sent so far.
+      getSocket()?.emit("message:seen", { otherUserId: activeUser.id });
+    });
   }, [activeUser]);
 
   useEffect(() => {
@@ -61,6 +119,36 @@ export default function Chat() {
       content: draft.trim(),
     });
     setDraft("");
+  }
+
+  function sendSticker(emoji) {
+    if (!activeUser) return;
+    getSocket().emit("message:send", {
+      receiverId: activeUser.id,
+      type: "sticker",
+      content: emoji,
+    });
+    setShowStickers(false);
+  }
+
+  async function handleFilePicked(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be picked again later
+    if (!file || !activeUser) return;
+
+    setUploading(true);
+    try {
+      const { url, filename, kind } = await api.uploadFile(file);
+      getSocket().emit("message:send", {
+        receiverId: activeUser.id,
+        type: kind, // "image" or "file"
+        content: JSON.stringify({ url, filename }),
+      });
+    } catch (err) {
+      alert(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
   }
 
   function logout() {
@@ -107,17 +195,67 @@ export default function Chat() {
              />
              </header> 
             <div className="message-list">
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={m.sender_id === me.id ? "bubble mine" : "bubble theirs"}
-                >
-                  {m.content}
-                </div>
-              ))}
+              {messages.map((m, i) => {
+                const mine = m.sender_id === me.id;
+                const isLastMine = mine && i === messages.length - 1;
+                const bubbleClass =
+                  m.type === "sticker"
+                    ? "bubble sticker"
+                    : m.type === "image" || m.type === "file"
+                    ? mine
+                      ? "bubble mine bubble-media"
+                      : "bubble theirs bubble-media"
+                    : mine
+                    ? "bubble mine"
+                    : "bubble theirs";
+
+                return (
+                  <div key={m.id} className="message-row">
+                    <div className={bubbleClass}>
+                      {renderMessageContent(m)}
+                    </div>
+                    {isLastMine && (
+                      <span className="seen-status">{m.seen ? "Seen" : "Sent"}</span>
+                    )}
+                  </div>
+                );
+              })}
               <div ref={bottomRef} />
             </div>
+            {showStickers && (
+              <div className="sticker-picker">
+                {STICKERS.map((s) => (
+                  <button key={s} type="button" className="sticker-option" onClick={() => sendSticker(s)}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
             <form className="composer" onSubmit={sendMessage}>
+              <button
+                type="button"
+                className="sticker-toggle"
+                onClick={() => setShowStickers((v) => !v)}
+                aria-label="Stickers"
+              >
+                🙂
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFilePicked}
+                style={{ display: "none" }}
+              />
+              <button
+                type="button"
+                className="attach-toggle"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                aria-label="Attach file"
+                title="Share a photo or file"
+              >
+                {uploading ? "⏳" : "📎"}
+              </button>
               <input
                 placeholder="Type a message..."
                 value={draft}
