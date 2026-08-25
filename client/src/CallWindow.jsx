@@ -1,7 +1,7 @@
 
 // client/src/components/CallWindow.jsx
 import { useEffect, useRef } from "react";
-import { useCall } from "../useCall";
+import { useCall } from "./useCall";
 
 export default function CallWindow({ currentUserId, targetUserId, targetName }) {
   const {
