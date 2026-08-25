@@ -11,11 +11,15 @@ import { setupChatSocket } from "./sockets/chat.js";
 const app = express();
 const httpServer = createServer(app);
 
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(",")
+  : ["http://localhost:5173"];
+
 const io = new Server(httpServer, {
-  cors: { origin: "http://localhost:5173" }, // Vite dev server
+  cors: { origin: allowedOrigins },
 });
 
-app.use(cors({ origin: "http://localhost:5173" }));
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);

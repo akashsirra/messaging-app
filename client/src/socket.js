@@ -6,7 +6,7 @@ export function connectSocket() {
   const token = localStorage.getItem("token");
   if (socket) socket.disconnect();
 
-  socket = io("http://localhost:4000", {
+  socket = io(import.meta.env.VITE_SERVER_URL || "http://localhost:4000", {
     auth: { token },
   });
 
