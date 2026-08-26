@@ -156,9 +156,16 @@ export function setupChatSocket(io) {
     });
 
     socket.on("disconnect", () => {
-      onlineUsers.delete(userId);
-      presenceState.delete(userId);
-      io.emit("presence:update", Array.from(onlineUsers.keys()));
+      // Only clear this user's "online" state if the disconnecting socket is
+      // still the one on record. If they reconnected (e.g. new tab, flaky
+      // network) before this old socket's disconnect event fired, onlineUsers
+      // already points at the newer socket — deleting here would wrongly
+      // mark a still-connected user as offline.
+      if (onlineUsers.get(userId) === socket.id) {
+        onlineUsers.delete(userId);
+        presenceState.delete(userId);
+        io.emit("presence:update", Array.from(onlineUsers.keys()));
+      }
     });
   });
 }
