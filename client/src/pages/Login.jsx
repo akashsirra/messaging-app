@@ -27,7 +27,7 @@ export default function Login() {
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1 className="wordmark">Whisper</h1>
+        <h1 className="wordmark">Themartiane</h1>
         <p className="tagline">Private messaging, on your own server.</p>
 
         <label>Username</label>
