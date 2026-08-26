@@ -9,6 +9,7 @@ import { Server } from "socket.io";
 import authRoutes from "./routes/auth.js";
 import messageRoutes from "./routes/messages.js";
 import uploadRoutes from "./routes/upload.js";
+import pushRoutes from "./routes/push.js";
 import { setupChatSocket } from "./sockets/chat.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,6 +31,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/push", pushRoutes);
 
 // Serves whatever's in server/uploads/ so the client can load shared images/files directly.
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
