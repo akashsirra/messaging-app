@@ -22,6 +22,11 @@ export const api = {
     request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   getUsers: () => request("/auth/users"),
   getHistory: (otherUserId) => request(`/messages/${otherUserId}`),
+  getContacts: () => request("/contacts"),
+  addContact: (username) =>
+    request("/contacts", { method: "POST", body: JSON.stringify({ username }) }),
+  deleteContact: (contactId) =>
+    request(`/contacts/${contactId}`, { method: "DELETE" }),
   getVapidPublicKey: () => request("/push/vapid-public-key"),
   subscribePush: (subscription) =>
     request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),
