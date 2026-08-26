@@ -11,7 +11,7 @@ const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥"
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 const toAbsoluteUrl = (relativeUrl) => `${SERVER_URL}${relativeUrl}`;
 
-const AVATAR_COLORS = ["#d4af37", "#c9a961", "#b8935a", "#e0c068", "#a68a52", "#cbb26a"];
+const AVATAR_COLORS = ["#8c2f39", "#4f6f52", "#b08d47", "#5b7c99", "#a15843", "#6b4c6b"];
 
 function avatarColor(username) {
   let hash = 0;
@@ -82,7 +82,35 @@ export default function Chat() {
 
   useEffect(() => {
     activeUserRef.current = activeUser;
+    // Tell the server which conversation (if any) is open, so it knows
+    // whether a new message needs a push notification.
+    const socket = getSocket();
+    socket?.emit("presence:focus", {
+      focused: document.visibilityState === "visible",
+      openWith: activeUser?.id ?? null,
+    });
   }, [activeUser]);
+
+  // Keep the server's picture of "is this tab focused" in sync, so
+  // backgrounding the tab still gets you push notifications for the chat
+  // you had open.
+  useEffect(() => {
+    const reportFocus = () => {
+      const socket = getSocket();
+      socket?.emit("presence:focus", {
+        focused: document.visibilityState === "visible",
+        openWith: activeUserRef.current?.id ?? null,
+      });
+    };
+    document.addEventListener("visibilitychange", reportFocus);
+    window.addEventListener("focus", reportFocus);
+    window.addEventListener("blur", reportFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", reportFocus);
+      window.removeEventListener("focus", reportFocus);
+      window.removeEventListener("blur", reportFocus);
+    };
+  }, []);
 
   useEffect(() => {
     if (!me) {
