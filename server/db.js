@@ -1,21 +1,54 @@
-import { Low } from "lowdb";
-import { JSONFile } from "lowdb/node";
-import path from "path";
-import { fileURLToPath } from "url";
+import pg from "pg";
 
-// All data lives in this one local JSON file. Delete it anytime to reset the app.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const file = path.join(__dirname, "messaging-app-data.json");
+const { Pool } = pg;
 
-const adapter = new JSONFile(file);
-const defaultData = { users: [], messages: [], pushSubscriptions: [], contacts: [] };
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
-const db = new Low(adapter, defaultData);
+// Creates tables on first boot if they don't already exist — no separate
+// migration step needed for a project this size.
+async function init() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL
+    );
+  `);
 
-await db.read();
-db.data ||= defaultData;
-db.data.pushSubscriptions ||= [];
-db.data.contacts ||= [];
-await db.write();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id SERIAL PRIMARY KEY,
+      sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      receiver_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL DEFAULT 'text',
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at TIMESTAMPTZ,
+      seen BOOLEAN NOT NULL DEFAULT false
+    );
+  `);
 
-export default db;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT UNIQUE NOT NULL,
+      keys JSONB NOT NULL
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS contacts (
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      contact_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (owner_id, contact_id)
+    );
+  `);
+}
+
+await init();
+
+export default pool;
