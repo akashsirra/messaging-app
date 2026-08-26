@@ -58,17 +58,23 @@ export function setupChatSocket(io) {
       presenceState.set(userId, { focused: !!focused, openWith: openWith ?? null });
     });
 
-    socket.on("message:send", async ({ receiverId, type, content, burnAfter }) => {
+    socket.on("message:send", async ({ receiverId, type, content, burnAfter, unlockAt }) => {
       const expiresAt =
         typeof burnAfter === "number" && burnAfter > 0
           ? new Date(Date.now() + burnAfter).toISOString()
           : null;
 
+      // unlockAt is expected as an ISO string from the client, or null/undefined.
+      const unlockAtValue =
+        typeof unlockAt === "string" && !isNaN(Date.parse(unlockAt))
+          ? unlockAt
+          : null;
+
       const insertResult = await db.query(
-        `INSERT INTO messages (sender_id, receiver_id, type, content, expires_at)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO messages (sender_id, receiver_id, type, content, expires_at, unlock_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [userId, receiverId, type || "text", content, expiresAt]
+        [userId, receiverId, type || "text", content, expiresAt, unlockAtValue]
       );
       const message = insertResult.rows[0];
 
@@ -87,8 +93,22 @@ export function setupChatSocket(io) {
       }
 
       const receiverSocketId = onlineUsers.get(receiverId);
+      const isLocked = unlockAtValue && new Date(unlockAtValue) > new Date();
+
       if (receiverSocketId) {
-        io.to(receiverSocketId).emit("message:new", message);
+        // Only push the real message live if it isn't a locked Time Capsule.
+        // Locked ones stay hidden from the receiver until they unlock (via
+        // the sweep below or a page refresh past unlock_at).
+        if (!isLocked) {
+          io.to(receiverSocketId).emit("message:new", message);
+        } else {
+          io.to(receiverSocketId).emit("capsule:incoming", {
+            id: message.id,
+            senderId: userId,
+            unlockAt: unlockAtValue,
+          });
+        }
+
         if (!receiverAlreadyHasSender) {
           const senderResult = await db.query(
             "SELECT username FROM users WHERE id = $1",
@@ -100,6 +120,8 @@ export function setupChatSocket(io) {
           });
         }
       }
+
+      // The sender always sees their own message immediately, capsule or not.
       socket.emit("message:new", message);
 
       const receiverPresence = presenceState.get(receiverId);
@@ -116,7 +138,11 @@ export function setupChatSocket(io) {
         const sender = senderResult.rows[0];
         sendPushToUser(receiverId, {
           title: sender?.username || "New message",
-          body: type === "text" ? content : "Sent you something",
+          body: isLocked
+            ? "Sent you a Time Capsule 🔒"
+            : type === "text"
+            ? content
+            : "Sent you something",
           senderId: userId,
           senderName: sender?.username,
         }).catch((err) => console.error("Push error:", err));
@@ -214,6 +240,24 @@ export function setupChatSocket(io) {
     for (const [uid, ids] of byUserPair) {
       const socketId = onlineUsers.get(uid);
       if (socketId) io.to(socketId).emit("message:deleted", { ids });
+    }
+  }, 15000);
+
+  // Sweep for Time Capsule messages that have just unlocked, and push the
+  // real content live to anyone currently online.
+  setInterval(async () => {
+    const unlockedResult = await db.query(
+      `SELECT * FROM messages
+       WHERE unlock_at IS NOT NULL AND unlock_at <= now()`
+    );
+    const unlocked = unlockedResult.rows;
+    if (unlocked.length === 0) return;
+
+    for (const message of unlocked) {
+      const receiverSocketId = onlineUsers.get(message.receiver_id);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("capsule:unlocked", message);
+      }
     }
   }, 15000);
 }
