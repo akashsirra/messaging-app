@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { useCall } from "./useCall";
 import "./CallWindow.css";
 
-const AVATAR_COLORS = ["#d4af37", "#c9a961", "#b8935a", "#e0c068", "#a68a52", "#cbb26a"];
+const AVATAR_COLORS = ["#8c2f39", "#4f6f52", "#b08d47", "#5b7c99", "#a15843", "#6b4c6b"];
 
 function avatarColor(username) {
   let hash = 0;
