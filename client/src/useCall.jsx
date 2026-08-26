@@ -11,6 +11,7 @@ export function useCall(currentUserId) {
   const [remoteUserId, setRemoteUserId] = useState(null);
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
+  const [videoOn, setVideoOn] = useState(true);
 
   const pcRef = useRef(null);
   const socketRef = useRef(null);
@@ -115,7 +116,18 @@ export function useCall(currentUserId) {
     setRemoteStream(null);
     setRemoteUserId(null);
     setCallStatus("idle");
+    setVideoOn(true);
   }, [remoteUserId, localStream]);
+
+  // Mutes/unmutes the outgoing video track without renegotiating the
+  // connection — the remote side just sees a frozen/black frame while off.
+  const toggleVideo = useCallback(() => {
+    if (!localStream) return;
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    videoTrack.enabled = !videoTrack.enabled;
+    setVideoOn(videoTrack.enabled);
+  }, [localStream]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -184,8 +196,10 @@ export function useCall(currentUserId) {
     remoteUserId,
     localStream,
     remoteStream,
+    videoOn,
     startCall,
     answerCall,
     endCall,
+    toggleVideo,
   };
 }
