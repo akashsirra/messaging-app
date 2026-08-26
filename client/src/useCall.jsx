@@ -14,10 +14,6 @@ export function useCall(currentUserId) {
 
   const pcRef = useRef(null);
   const socketRef = useRef(null);
-  // ICE candidates can arrive over the socket before setRemoteDescription()
-  // has resolved (the offer/answer round trip is async). addIceCandidate()
-  // throws if called too early, so anything that arrives early is queued
-  // here and flushed once the remote description is set.
   const pendingCandidatesRef = useRef([]);
 
   const createPeerConnection = useCallback((targetUserId) => {
@@ -81,8 +77,6 @@ export function useCall(currentUserId) {
       });
     } catch (err) {
       console.error("Could not access camera/microphone:", err);
-      // Let the caller know we're bailing out instead of leaving them
-      // stuck on "ringing"/"calling" forever.
       if (remoteUserId) socket.emit("call:end", { receiverId: remoteUserId });
       pc?.close();
       pcRef.current = null;
@@ -96,8 +90,6 @@ export function useCall(currentUserId) {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-    // Flush any ICE candidates that arrived while we were waiting on
-    // getUserMedia / the offer round trip.
     for (const candidate of pendingCandidatesRef.current) {
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -130,8 +122,6 @@ export function useCall(currentUserId) {
     socketRef.current = socket;
 
     socket.on("call:offer", async ({ from, offer }) => {
-      // Already on a call — auto-decline instead of silently dropping the
-      // existing call state and stealing the UI out from under the user.
       if (pcRef.current) {
         socket.emit("call:end", { receiverId: from });
         return;
@@ -159,10 +149,6 @@ export function useCall(currentUserId) {
 
     socket.on("call:ice-candidate", async ({ candidate }) => {
       const pc = pcRef.current;
-      // Queue candidates until the remote description is actually set,
-      // rather than letting addIceCandidate() throw and silently dropping
-      // them — otherwise the call can fail to establish a media path on
-      // slower connections.
       if (!pc || !pc.remoteDescription) {
         pendingCandidatesRef.current.push(candidate);
         return;
