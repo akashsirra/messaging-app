@@ -119,6 +119,13 @@ export function setupChatSocket(io) {
       }
     });
 
+    socket.on("message:seen", ({ otherUserId }) => {
+      const otherSocketId = onlineUsers.get(otherUserId);
+      if (otherSocketId) {
+        io.to(otherSocketId).emit("message:seen", { byUserId: userId });
+      }
+    });
+
     // --- WebRTC call signaling (used in Phase 4) ---
     socket.on("call:offer", ({ receiverId, offer }) => {
       const receiverSocketId = onlineUsers.get(receiverId);
