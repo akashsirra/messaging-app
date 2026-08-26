@@ -14,6 +14,11 @@ export function useCall(currentUserId) {
 
   const pcRef = useRef(null);
   const socketRef = useRef(null);
+  // ICE candidates can arrive over the socket before setRemoteDescription()
+  // has resolved (the offer/answer round trip is async). addIceCandidate()
+  // throws if called too early, so anything that arrives early is queued
+  // here and flushed once the remote description is set.
+  const pendingCandidatesRef = useRef([]);
 
   const createPeerConnection = useCallback((targetUserId) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -39,10 +44,17 @@ export function useCall(currentUserId) {
     const socket = getSocket();
     socketRef.current = socket;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true,
-    });
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+    } catch (err) {
+      console.error("Could not access camera/microphone:", err);
+      setCallStatus("idle");
+      return;
+    }
     setLocalStream(stream);
 
     const pc = createPeerConnection(targetUserId);
@@ -61,15 +73,39 @@ export function useCall(currentUserId) {
     const socket = socketRef.current;
     const pc = pcRef.current;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true,
-    });
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+    } catch (err) {
+      console.error("Could not access camera/microphone:", err);
+      // Let the caller know we're bailing out instead of leaving them
+      // stuck on "ringing"/"calling" forever.
+      if (remoteUserId) socket.emit("call:end", { receiverId: remoteUserId });
+      pc?.close();
+      pcRef.current = null;
+      setRemoteUserId(null);
+      setCallStatus("idle");
+      return;
+    }
     setLocalStream(stream);
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
+
+    // Flush any ICE candidates that arrived while we were waiting on
+    // getUserMedia / the offer round trip.
+    for (const candidate of pendingCandidatesRef.current) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error("Error adding queued ICE candidate", err);
+      }
+    }
+    pendingCandidatesRef.current = [];
 
     socket.emit("call:answer", { receiverId: remoteUserId, answer });
     setCallStatus("in-call");
@@ -81,6 +117,7 @@ export function useCall(currentUserId) {
     }
     pcRef.current?.close();
     pcRef.current = null;
+    pendingCandidatesRef.current = [];
     localStream?.getTracks().forEach((t) => t.stop());
     setLocalStream(null);
     setRemoteStream(null);
@@ -93,6 +130,12 @@ export function useCall(currentUserId) {
     socketRef.current = socket;
 
     socket.on("call:offer", async ({ from, offer }) => {
+      // Already on a call — auto-decline instead of silently dropping the
+      // existing call state and stealing the UI out from under the user.
+      if (pcRef.current) {
+        socket.emit("call:end", { receiverId: from });
+        return;
+      }
       setRemoteUserId(from);
       const pc = createPeerConnection(from);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -103,12 +146,29 @@ export function useCall(currentUserId) {
       await pcRef.current?.setRemoteDescription(
         new RTCSessionDescription(answer)
       );
+      for (const candidate of pendingCandidatesRef.current) {
+        try {
+          await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.error("Error adding queued ICE candidate", err);
+        }
+      }
+      pendingCandidatesRef.current = [];
       setCallStatus("in-call");
     });
 
     socket.on("call:ice-candidate", async ({ candidate }) => {
+      const pc = pcRef.current;
+      // Queue candidates until the remote description is actually set,
+      // rather than letting addIceCandidate() throw and silently dropping
+      // them — otherwise the call can fail to establish a media path on
+      // slower connections.
+      if (!pc || !pc.remoteDescription) {
+        pendingCandidatesRef.current.push(candidate);
+        return;
+      }
       try {
-        await pcRef.current?.addIceCandidate(new RTCIceCandidate(candidate));
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
         console.error("Error adding ICE candidate", err);
       }
@@ -117,6 +177,7 @@ export function useCall(currentUserId) {
     socket.on("call:end", () => {
       pcRef.current?.close();
       pcRef.current = null;
+      pendingCandidatesRef.current = [];
       localStream?.getTracks().forEach((t) => t.stop());
       setLocalStream(null);
       setRemoteStream(null);
