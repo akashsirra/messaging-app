@@ -14,10 +14,13 @@ router.post("/subscribe", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Invalid subscription." });
   }
 
+  // A browser/device only has one push subscription at a time. If a
+  // different user logs in on the same browser, re-point this subscription
+  // to them instead of leaving it pointed at whoever subscribed first.
   await db.query(
     `INSERT INTO push_subscriptions (user_id, endpoint, keys)
      VALUES ($1, $2, $3)
-     ON CONFLICT (endpoint) DO NOTHING`,
+     ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, keys = EXCLUDED.keys`,
     [req.user.id, subscription.endpoint, subscription.keys]
   );
 
