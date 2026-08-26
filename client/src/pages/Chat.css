@@ -1,8 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap');
+
 .chat-page {
   display: flex;
   height: 100vh;
-  background: #0f0f14;
-  color: #e8e8ec;
+  background: #05050a;
+  color: #e8e6df;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -10,49 +12,57 @@
 .user-list {
   width: 260px;
   min-width: 260px;
-  background: #16161d;
-  border-right: 1px solid #26262f;
-  padding: 16px;
+  background: linear-gradient(180deg, #0a0a12 0%, #06060a 100%);
+  border-right: 1px solid #2a2410;
+  padding: 18px;
   overflow-y: auto;
 }
 
 .user-list h3 {
-  margin: 0 0 16px;
-  font-size: 14px;
+  margin: 0 0 18px;
+  font-family: 'Cinzel', serif;
+  font-size: 15px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #8a8a96;
+  letter-spacing: 0.12em;
+  color: #d4af37;
+  text-shadow: 0 0 12px rgba(212, 175, 55, 0.35);
 }
 
 .user-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 11px 12px;
+  border-radius: 8px;
   cursor: pointer;
   margin-bottom: 4px;
-  transition: background 0.15s;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  color: #c9c6ba;
 }
 
 .user-item:hover {
-  background: #1e1e28;
+  background: #12121a;
+  border-color: #2a2410;
 }
 
 .user-item.active {
-  background: #2a2a3d;
+  background: #16160f;
+  border-color: #d4af37;
+  color: #f0e6c8;
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #4a4a56;
+  background: #3a3a42;
   flex-shrink: 0;
 }
 
 .status-dot.online {
-  background: #34c759;
+  background: #d4af37;
+  box-shadow: 0 0 6px rgba(212, 175, 55, 0.8);
 }
 
 /* Main chat area */
@@ -61,6 +71,9 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background:
+    radial-gradient(ellipse at top, rgba(212, 175, 55, 0.05) 0%, transparent 60%),
+    #08080d;
 }
 
 .empty-state {
@@ -68,62 +81,82 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6a6a76;
-  font-size: 15px;
+  color: #4a4838;
+  font-family: 'Cinzel', serif;
+  font-size: 16px;
+  letter-spacing: 0.05em;
+  position: relative;
+}
+
+.empty-state::before {
+  content: "";
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgba(212, 175, 55, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  z-index: -1;
 }
 
 .chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid #26262f;
+  padding: 16px 22px;
+  border-bottom: 1px solid #2a2410;
+  font-family: 'Cinzel', serif;
   font-weight: 600;
-  background: #16161d;
+  letter-spacing: 0.04em;
+  background: #0a0a12;
+  color: #d4af37;
 }
 
 /* Messages */
 .message-list {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .message {
   max-width: 60%;
-  padding: 10px 14px;
-  border-radius: 16px;
-  line-height: 1.4;
+  padding: 11px 15px;
+  border-radius: 4px;
+  line-height: 1.45;
   font-size: 14.5px;
   word-wrap: break-word;
+  border: 1px solid transparent;
 }
 
 .message.sent {
   align-self: flex-end;
-  background: #5b5bd6;
-  color: white;
-  border-bottom-right-radius: 4px;
+  background: linear-gradient(135deg, #1a1610 0%, #241d0f 100%);
+  border-color: #d4af37;
+  color: #f0e6c8;
+  border-bottom-right-radius: 2px;
 }
 
 .message.received {
   align-self: flex-start;
-  background: #24242e;
-  color: #e8e8ec;
-  border-bottom-left-radius: 4px;
+  background: #14141c;
+  border-color: #22222c;
+  color: #c9c6ba;
+  border-bottom-left-radius: 2px;
 }
 
 .shared-image {
   max-width: 220px;
-  border-radius: 10px;
+  border-radius: 4px;
+  border: 1px solid #2a2410;
   display: block;
   margin-top: 4px;
 }
 
 .shared-file {
-  color: inherit;
+  color: #d4af37;
   text-decoration: underline;
 }
 
@@ -132,20 +165,20 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 10px 20px;
-  border-top: 1px solid #26262f;
-  background: #16161d;
+  padding: 10px 22px;
+  border-top: 1px solid #2a2410;
+  background: #0a0a12;
 }
 
 .sticker-picker span {
   font-size: 22px;
   cursor: pointer;
   padding: 4px;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .sticker-picker span:hover {
-  background: #26262f;
+  background: #16160f;
 }
 
 /* Input bar */
@@ -153,30 +186,35 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 20px;
-  border-top: 1px solid #26262f;
-  background: #16161d;
+  padding: 16px 22px;
+  border-top: 1px solid #2a2410;
+  background: #0a0a12;
 }
 
 .message-input input[type="text"] {
   flex: 1;
-  background: #24242e;
-  border: 1px solid #33333f;
-  border-radius: 20px;
-  padding: 10px 16px;
-  color: #e8e8ec;
+  background: #14141c;
+  border: 1px solid #2a2a36;
+  border-radius: 4px;
+  padding: 11px 16px;
+  color: #e8e6df;
   font-size: 14.5px;
   outline: none;
 }
 
 .message-input input[type="text"]:focus {
-  border-color: #5b5bd6;
+  border-color: #d4af37;
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.3);
+}
+
+.message-input input[type="text"]::placeholder {
+  color: #4a4838;
 }
 
 .message-input button {
-  background: #24242e;
-  border: none;
-  color: #e8e8ec;
+  background: #14141c;
+  border: 1px solid #22222c;
+  color: #d4af37;
   border-radius: 50%;
   width: 38px;
   height: 38px;
@@ -186,20 +224,26 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: all 0.15s;
 }
 
 .message-input button:hover {
-  background: #33333f;
+  background: #1a1610;
+  border-color: #d4af37;
 }
 
 .message-input button:last-child {
-  background: #5b5bd6;
-  border-radius: 20px;
+  background: #d4af37;
+  border: none;
+  color: #0a0a12;
+  border-radius: 4px;
   width: auto;
-  padding: 0 18px;
-  font-weight: 600;
+  padding: 0 20px;
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
 .message-input button:last-child:hover {
-  background: #4a4ac2;
+  background: #e8c458;
 }
