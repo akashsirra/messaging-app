@@ -7,12 +7,14 @@ const onlineUsers = new Map();
 const presenceState = new Map();
 
 async function sendPushToUser(userId, payload) {
-  await db.read();
-  const subs = db.data.pushSubscriptions.filter((s) => s.userId === userId);
+  const result = await db.query(
+    "SELECT * FROM push_subscriptions WHERE user_id = $1",
+    [userId]
+  );
+  const subs = result.rows;
   if (subs.length === 0) return;
 
   const body = JSON.stringify(payload);
-  let changed = false;
 
   await Promise.all(
     subs.map(async (sub) => {
@@ -23,18 +25,15 @@ async function sendPushToUser(userId, payload) {
         );
       } catch (err) {
         if (err.statusCode === 404 || err.statusCode === 410) {
-          db.data.pushSubscriptions = db.data.pushSubscriptions.filter(
-            (s) => s.endpoint !== sub.endpoint
-          );
-          changed = true;
+          await db.query("DELETE FROM push_subscriptions WHERE endpoint = $1", [
+            sub.endpoint,
+          ]);
         } else {
           console.error("Push send failed:", err.message);
         }
       }
     })
   );
-
-  if (changed) await db.write();
 }
 
 export function setupChatSocket(io) {
@@ -60,49 +59,44 @@ export function setupChatSocket(io) {
     });
 
     socket.on("message:send", async ({ receiverId, type, content, burnAfter }) => {
-      await db.read();
-      const id = db.data.messages.length
-        ? Math.max(...db.data.messages.map((m) => m.id)) + 1
-        : 1;
-
-      const now = new Date();
       const expiresAt =
         typeof burnAfter === "number" && burnAfter > 0
-          ? new Date(now.getTime() + burnAfter).toISOString()
+          ? new Date(Date.now() + burnAfter).toISOString()
           : null;
 
-      const message = {
-        id,
-        sender_id: userId,
-        receiver_id: receiverId,
-        type: type || "text",
-        content,
-        created_at: now.toISOString(),
-        expires_at: expiresAt,
-        seen: false,
-      };
-
-      db.data.messages.push(message);
-      await db.write();
+      const insertResult = await db.query(
+        `INSERT INTO messages (sender_id, receiver_id, type, content, expires_at)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [userId, receiverId, type || "text", content, expiresAt]
+      );
+      const message = insertResult.rows[0];
 
       // Auto-add the sender to the receiver's contacts so a message from
       // someone new doesn't just vanish from their sidebar.
-      const receiverAlreadyHasSender = db.data.contacts.some(
-        (c) => c.ownerId === receiverId && c.contactId === userId
+      const existingContact = await db.query(
+        "SELECT 1 FROM contacts WHERE owner_id = $1 AND contact_id = $2",
+        [receiverId, userId]
       );
+      const receiverAlreadyHasSender = existingContact.rows.length > 0;
       if (!receiverAlreadyHasSender) {
-        db.data.contacts.push({ ownerId: receiverId, contactId: userId });
-        await db.write();
+        await db.query(
+          "INSERT INTO contacts (owner_id, contact_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [receiverId, userId]
+        );
       }
 
       const receiverSocketId = onlineUsers.get(receiverId);
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("message:new", message);
         if (!receiverAlreadyHasSender) {
-          const sender = db.data.users.find((u) => u.id === userId);
+          const senderResult = await db.query(
+            "SELECT username FROM users WHERE id = $1",
+            [userId]
+          );
           io.to(receiverSocketId).emit("contact:added", {
             id: userId,
-            username: sender?.username,
+            username: senderResult.rows[0]?.username,
           });
         }
       }
@@ -115,7 +109,11 @@ export function setupChatSocket(io) {
         receiverPresence?.openWith === userId;
 
       if (!alreadySeeing) {
-        const sender = db.data.users.find((u) => u.id === userId);
+        const senderResult = await db.query(
+          "SELECT username FROM users WHERE id = $1",
+          [userId]
+        );
+        const sender = senderResult.rows[0];
         sendPushToUser(receiverId, {
           title: sender?.username || "New message",
           body: type === "text" ? content : "Sent you something",
@@ -126,15 +124,11 @@ export function setupChatSocket(io) {
     });
 
     socket.on("message:seen", async ({ otherUserId }) => {
-      await db.read();
-      let changed = false;
-      db.data.messages.forEach((m) => {
-        if (m.sender_id === otherUserId && m.receiver_id === userId && !m.seen) {
-          m.seen = true;
-          changed = true;
-        }
-      });
-      if (changed) await db.write();
+      await db.query(
+        `UPDATE messages SET seen = true
+         WHERE sender_id = $1 AND receiver_id = $2 AND seen = false`,
+        [otherUserId, userId]
+      );
 
       const otherSocketId = onlineUsers.get(otherUserId);
       if (otherSocketId) {
@@ -178,15 +172,11 @@ export function setupChatSocket(io) {
     });
 
     socket.on("chat:delete", async ({ otherUserId }) => {
-      await db.read();
-      db.data.messages = db.data.messages.filter(
-        (m) =>
-          !(
-            (m.sender_id === userId && m.receiver_id === otherUserId) ||
-            (m.sender_id === otherUserId && m.receiver_id === userId)
-          )
+      await db.query(
+        `DELETE FROM messages
+         WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1)`,
+        [userId, otherUserId]
       );
-      await db.write();
 
       const otherSocketId = onlineUsers.get(otherUserId);
       if (otherSocketId) {
@@ -205,16 +195,14 @@ export function setupChatSocket(io) {
   });
 
   setInterval(async () => {
-    await db.read();
-    const now = Date.now();
-    const expired = db.data.messages.filter(
-      (m) => m.expires_at && new Date(m.expires_at).getTime() <= now
+    const expiredResult = await db.query(
+      "SELECT id, sender_id, receiver_id FROM messages WHERE expires_at IS NOT NULL AND expires_at <= now()"
     );
+    const expired = expiredResult.rows;
     if (expired.length === 0) return;
 
     const expiredIds = expired.map((m) => m.id);
-    db.data.messages = db.data.messages.filter((m) => !expiredIds.includes(m.id));
-    await db.write();
+    await db.query("DELETE FROM messages WHERE id = ANY($1::int[])", [expiredIds]);
 
     const byUserPair = new Map();
     for (const m of expired) {
