@@ -85,9 +85,26 @@ export function setupChatSocket(io) {
       db.data.messages.push(message);
       await db.write();
 
+      // Auto-add the sender to the receiver's contacts so a message from
+      // someone new doesn't just vanish from their sidebar.
+      const receiverAlreadyHasSender = db.data.contacts.some(
+        (c) => c.ownerId === receiverId && c.contactId === userId
+      );
+      if (!receiverAlreadyHasSender) {
+        db.data.contacts.push({ ownerId: receiverId, contactId: userId });
+        await db.write();
+      }
+
       const receiverSocketId = onlineUsers.get(receiverId);
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("message:new", message);
+        if (!receiverAlreadyHasSender) {
+          const sender = db.data.users.find((u) => u.id === userId);
+          io.to(receiverSocketId).emit("contact:added", {
+            id: userId,
+            username: sender?.username,
+          });
+        }
       }
       socket.emit("message:new", message);
 
@@ -145,6 +162,14 @@ export function setupChatSocket(io) {
         io.to(receiverSocketId).emit("call:ice-candidate", { from: userId, candidate });
       }
     });
+
+    socket.on("call:end", ({ receiverId }) => {
+      const receiverSocketId = onlineUsers.get(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("call:end", { from: userId });
+      }
+    });
+
     socket.on("call:video-toggle", ({ receiverId, videoOn }) => {
       const receiverSocketId = onlineUsers.get(receiverId);
       if (receiverSocketId) {
@@ -152,11 +177,22 @@ export function setupChatSocket(io) {
       }
     });
 
-    socket.on("call:end", ({ receiverId }) => {
-      const receiverSocketId = onlineUsers.get(receiverId);
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("call:end", { from: userId });
+    socket.on("chat:delete", async ({ otherUserId }) => {
+      await db.read();
+      db.data.messages = db.data.messages.filter(
+        (m) =>
+          !(
+            (m.sender_id === userId && m.receiver_id === otherUserId) ||
+            (m.sender_id === otherUserId && m.receiver_id === userId)
+          )
+      );
+      await db.write();
+
+      const otherSocketId = onlineUsers.get(otherUserId);
+      if (otherSocketId) {
+        io.to(otherSocketId).emit("chat:deleted", { byUserId: userId });
       }
+      socket.emit("chat:deleted", { byUserId: userId });
     });
 
     socket.on("disconnect", () => {
