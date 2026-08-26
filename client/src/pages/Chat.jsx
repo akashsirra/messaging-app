@@ -11,7 +11,11 @@ const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥"
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 const toAbsoluteUrl = (relativeUrl) => `${SERVER_URL}${relativeUrl}`;
 
-const AVATAR_COLORS = ["#8c2f39", "#4f6f52", "#b08d47", "#5b7c99", "#a15843", "#6b4c6b"];
+// Fixed 24h burn window — kept as a single toggle rather than a menu of
+// durations, to match the minimal-by-design brief.
+const BURN_DURATION_MS = 24 * 60 * 60 * 1000;
+
+const AVATAR_COLORS = ["#4fd1c5", "#ff7a45", "#8a8aff", "#5fd98a", "#e0c341", "#ff6b9d"];
 
 function avatarColor(username) {
   let hash = 0;
@@ -37,6 +41,18 @@ function dayLabel(iso) {
   if (sameDay(d, today)) return "Today";
   if (sameDay(d, yesterday)) return "Yesterday";
   return d.toLocaleDateString([], { month: "long", day: "numeric" });
+}
+
+// Renders a countdown like "3h left" / "12m left" / "40s left" for burn messages.
+function burnCountdown(expiresAt, now) {
+  const msLeft = new Date(expiresAt).getTime() - now;
+  if (msLeft <= 0) return "0s left";
+  const s = Math.floor(msLeft / 1000);
+  if (s < 60) return `${s}s left`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m left`;
+  const h = Math.floor(m / 60);
+  return `${h}h left`;
 }
 
 function renderMessageContent(message) {
@@ -76,14 +92,15 @@ export default function Chat() {
   const [draft, setDraft] = useState("");
   const [showStickers, setShowStickers] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [burnMode, setBurnMode] = useState(false);
+  const [expiringIds, setExpiringIds] = useState([]);
+  const [now, setNow] = useState(Date.now());
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
 
   useEffect(() => {
     activeUserRef.current = activeUser;
-    // Tell the server which conversation (if any) is open, so it knows
-    // whether a new message needs a push notification.
     const socket = getSocket();
     socket?.emit("presence:focus", {
       focused: document.visibilityState === "visible",
@@ -91,9 +108,6 @@ export default function Chat() {
     });
   }, [activeUser]);
 
-  // Keep the server's picture of "is this tab focused" in sync, so
-  // backgrounding the tab still gets you push notifications for the chat
-  // you had open.
   useEffect(() => {
     const reportFocus = () => {
       const socket = getSocket();
@@ -110,6 +124,12 @@ export default function Chat() {
       window.removeEventListener("focus", reportFocus);
       window.removeEventListener("blur", reportFocus);
     };
+  }, []);
+
+  // Ticks once a second so burn countdowns stay live without re-fetching.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
@@ -145,12 +165,23 @@ export default function Chat() {
       );
     });
 
+    // Server tells us a burn timer expired — play a brief ash-out
+    // animation, then drop the message from view.
+    socket.on("message:deleted", ({ ids }) => {
+      setExpiringIds((prev) => [...prev, ...ids]);
+      setTimeout(() => {
+        setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
+        setExpiringIds((prev) => prev.filter((id) => !ids.includes(id)));
+      }, 480);
+    });
+
     setupPushNotifications();
 
     return () => {
       socket.off("presence:update");
       socket.off("message:new");
       socket.off("message:seen");
+      socket.off("message:deleted");
       socket.disconnect();
     };
   }, []);
@@ -186,6 +217,7 @@ export default function Chat() {
       receiverId: activeUser.id,
       type: "text",
       content: draft.trim(),
+      burnAfter: burnMode ? BURN_DURATION_MS : null,
     });
     setDraft("");
   };
@@ -197,6 +229,7 @@ export default function Chat() {
       receiverId: activeUser.id,
       type: "text",
       content: emoji,
+      burnAfter: burnMode ? BURN_DURATION_MS : null,
     });
     setShowStickers(false);
   };
@@ -213,6 +246,7 @@ export default function Chat() {
         receiverId: activeUser.id,
         type: isImage ? "image" : "file",
         content: JSON.stringify({ url, filename: file.name }),
+        burnAfter: burnMode ? BURN_DURATION_MS : null,
       });
     } catch (err) {
       console.error("Upload failed", err);
@@ -229,7 +263,6 @@ export default function Chat() {
     navigate("/login");
   };
 
-  // Build render items: day dividers + messages, with grouping metadata
   const items = [];
   messages.forEach((m, i) => {
     const prev = messages[i - 1];
@@ -272,7 +305,7 @@ export default function Chat() {
               <div className="user-item-info">
                 <span className="user-item-name">{u.username}</span>
                 <span className="user-item-status">
-                  {onlineIds.includes(u.id) ? "Online" : "Offline"}
+                  {onlineIds.includes(u.id) ? "online" : "offline"}
                 </span>
               </div>
               <span
@@ -281,6 +314,11 @@ export default function Chat() {
               />
             </div>
           ))}
+        {!loadingUsers && users.length === 0 && (
+          <div className="user-item-status" style={{ padding: "8px 20px" }}>
+            No other users yet.
+          </div>
+        )}
       </aside>
 
       <main className="chat-window">
@@ -299,16 +337,27 @@ export default function Chat() {
                 <div>
                   <span className="chat-header-name">{activeUser.username}</span>
                   <span className="chat-header-status">
-                    {onlineIds.includes(activeUser.id) ? "Online" : "Offline"}
+                    {onlineIds.includes(activeUser.id) ? "online" : "offline"}
                   </span>
                 </div>
               </div>
+              <button
+                className={`burn-toggle ${burnMode ? "active" : ""}`}
+                onClick={() => setBurnMode((b) => !b)}
+                title={burnMode ? "Auto-delete on (24h) — click to turn off" : "Turn on 24h auto-delete"}
+              >
+                🔥
+              </button>
               <CallWindow
                 currentUserId={me.id}
                 targetUserId={activeUser.id}
                 targetName={activeUser.username}
               />
             </header>
+
+            {burnMode && (
+              <div className="burn-banner">New messages in this chat will burn 24h after sending</div>
+            )}
 
             <div className="message-list">
               {items.map((item) => {
@@ -322,10 +371,18 @@ export default function Chat() {
                 const m = item.data;
                 const isMine = m.sender_id === me.id;
                 const person = isMine ? me : activeUser;
+                const isBurning = !!m.expires_at;
+                const isExpiring = expiringIds.includes(m.id);
+                let fusePct = null;
+                if (isBurning) {
+                  const total = new Date(m.expires_at) - new Date(m.created_at);
+                  const remaining = new Date(m.expires_at) - now;
+                  fusePct = Math.max(0, Math.min(100, (remaining / total) * 100));
+                }
                 return (
                   <div
                     key={item.key}
-                    className={`message-row ${isMine ? "sent" : ""} ${item.grouped ? "grouped" : ""}`}
+                    className={`message-row ${isMine ? "sent" : ""} ${item.grouped ? "grouped" : ""} ${isExpiring ? "expiring" : ""}`}
                   >
                     {!isMine && (
                       <div
@@ -336,13 +393,19 @@ export default function Chat() {
                       </div>
                     )}
                     <div className="message-col">
-                      <div className={`message ${isMine ? "sent" : "received"}`}>
+                      <div className={`message ${isMine ? "sent" : "received"} ${isBurning ? "burning" : ""}`}>
                         {renderMessageContent(m)}
+                        {isBurning && fusePct !== null && (
+                          <span className="burn-fuse" style={{ width: `${fusePct}%` }} />
+                        )}
                       </div>
                       {!item.grouped && (
                         <span className="message-meta">
-                          {formatTime(m.created_at)}
-                          {isMine && m.seen ? " · Seen" : ""}
+                          <span>{formatTime(m.created_at)}</span>
+                          {isMine && m.seen && <span className="seen">· seen</span>}
+                          {isBurning && (
+                            <span className="burn-countdown">· 🔥 {burnCountdown(m.expires_at, now)}</span>
+                          )}
                         </span>
                       )}
                     </div>
@@ -363,14 +426,16 @@ export default function Chat() {
             )}
 
             <div className="message-input">
-              <button onClick={() => setShowStickers((s) => !s)}>😀</button>
+              <button onClick={() => setShowStickers((s) => !s)} title="Stickers">
+                😀
+              </button>
               <input
                 type="file"
                 ref={fileInputRef}
                 style={{ display: "none" }}
                 onChange={handleFileUpload}
               />
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploading} title="Attach file">
                 📎
               </button>
               <input
