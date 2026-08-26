@@ -1,10 +1,9 @@
 import pg from "pg";
-
 const { Pool } = pg;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: false,
 });
 
 // Creates tables on first boot if they don't already exist — no separate
