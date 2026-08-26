@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { connectSocket, getSocket } from "../socket.js";
 import { setupPushNotifications } from "../push.js";
-import CallWindow from"../CallWindow";
+import CallWindow from "../CallWindow";
 
 const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
 
@@ -56,6 +56,13 @@ export default function Chat() {
   const [uploading, setUploading] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
+  const activeUserRef = useRef(null);
+
+  // Keep a ref in sync with activeUser so socket callbacks (registered once
+  // on mount) always see the latest selection instead of a stale closure.
+  useEffect(() => {
+    activeUserRef.current = activeUser;
+  }, [activeUser]);
 
   // Connect socket once on mount
   useEffect(() => {
@@ -80,4 +87,163 @@ export default function Chat() {
     socket.on("message:seen", ({ byUserId }) => {
       setMessages((prev) =>
         prev.map((m) =>
-          m.sender_id === me.id && m.receiver_id === byUse
+          m.sender_id === me.id && m.receiver_id === byUserId
+            ? { ...m, seen: true }
+            : m
+        )
+      );
+    });
+
+    setupPushNotifications();
+
+    return () => {
+      socket.off("presence:update");
+      socket.off("message:new");
+      socket.off("message:seen");
+    };
+  }, []);
+
+  // Load the user list once
+  useEffect(() => {
+    api.get("/users").then((res) => setUsers(res.data));
+  }, []);
+
+  // Load message history whenever the active conversation changes
+  useEffect(() => {
+    if (!activeUser) return;
+    api.get(`/messages/${activeUser.id}`).then((res) => {
+      setMessages(res.data);
+      const socket = getSocket();
+      socket.emit("message:seen", { otherUserId: activeUser.id });
+    });
+  }, [activeUser]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!draft.trim() || !activeUser) return;
+    const socket = getSocket();
+    const msg = {
+      sender_id: me.id,
+      receiver_id: activeUser.id,
+      type: "text",
+      content: draft.trim(),
+    };
+    socket.emit("message:send", msg);
+    setMessages((prev) => [...prev, msg]);
+    setDraft("");
+  };
+
+  const handleStickerPick = (emoji) => {
+    if (!activeUser) return;
+    const socket = getSocket();
+    const msg = {
+      sender_id: me.id,
+      receiver_id: activeUser.id,
+      type: "text",
+      content: emoji,
+    };
+    socket.emit("message:send", msg);
+    setMessages((prev) => [...prev, msg]);
+    setShowStickers(false);
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeUser) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/upload", formData);
+      const isImage = file.type.startsWith("image/");
+      const socket = getSocket();
+      const msg = {
+        sender_id: me.id,
+        receiver_id: activeUser.id,
+        type: isImage ? "image" : "file",
+        content: JSON.stringify({ url: res.data.url, filename: file.name }),
+      };
+      socket.emit("message:send", msg);
+      setMessages((prev) => [...prev, msg]);
+    } catch (err) {
+      console.error("Upload failed", err);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <div className="chat-page">
+      <aside className="user-list">
+        <h3>Chats</h3>
+        {users.map((u) => (
+          <div
+            key={u.id}
+            className={`user-item ${activeUser?.id === u.id ? "active" : ""}`}
+            onClick={() => setActiveUser(u)}
+          >
+            <span className={`status-dot ${onlineIds.includes(u.id) ? "online" : ""}`} />
+            {u.username}
+          </div>
+        ))}
+      </aside>
+
+      <main className="chat-window">
+        {!activeUser ? (
+          <div className="empty-state">Select a chat to start messaging</div>
+        ) : (
+          <>
+            <header className="chat-header">{activeUser.username}</header>
+
+            <div className="message-list">
+              {messages.map((m, i) => (
+                <div
+                  key={m.id || i}
+                  className={`message ${m.sender_id === me.id ? "sent" : "received"}`}
+                >
+                  {renderMessageContent(m)}
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+
+            {showStickers && (
+              <div className="sticker-picker">
+                {STICKERS.map((s) => (
+                  <span key={s} onClick={() => handleStickerPick(s)}>
+                    {s}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="message-input">
+              <button onClick={() => setShowStickers((s) => !s)}>😀</button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: "none" }}
+                onChange={handleFileUpload}
+              />
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                📎
+              </button>
+              <input
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                placeholder="Type a message..."
+              />
+              <button onClick={handleSend}>Send</button>
+            </div>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
