@@ -12,10 +12,16 @@ export function useCall(currentUserId) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [videoOn, setVideoOn] = useState(true);
+  const [remoteVideoOn, setRemoteVideoOn] = useState(true);
 
   const pcRef = useRef(null);
   const socketRef = useRef(null);
   const pendingCandidatesRef = useRef([]);
+  const remoteUserIdRef = useRef(null);
+
+  useEffect(() => {
+    remoteUserIdRef.current = remoteUserId;
+  }, [remoteUserId]);
 
   const createPeerConnection = useCallback((targetUserId) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -78,7 +84,9 @@ export function useCall(currentUserId) {
       });
     } catch (err) {
       console.error("Could not access camera/microphone:", err);
-      if (remoteUserId) socket.emit("call:end", { receiverId: remoteUserId });
+      if (remoteUserIdRef.current) {
+        socket.emit("call:end", { receiverId: remoteUserIdRef.current });
+      }
       pc?.close();
       pcRef.current = null;
       setRemoteUserId(null);
@@ -100,13 +108,13 @@ export function useCall(currentUserId) {
     }
     pendingCandidatesRef.current = [];
 
-    socket.emit("call:answer", { receiverId: remoteUserId, answer });
+    socket.emit("call:answer", { receiverId: remoteUserIdRef.current, answer });
     setCallStatus("in-call");
-  }, [remoteUserId]);
+  }, []);
 
   const endCall = useCallback(() => {
-    if (remoteUserId) {
-      socketRef.current?.emit("call:end", { receiverId: remoteUserId });
+    if (remoteUserIdRef.current) {
+      socketRef.current?.emit("call:end", { receiverId: remoteUserIdRef.current });
     }
     pcRef.current?.close();
     pcRef.current = null;
@@ -117,16 +125,25 @@ export function useCall(currentUserId) {
     setRemoteUserId(null);
     setCallStatus("idle");
     setVideoOn(true);
-  }, [remoteUserId, localStream]);
+    setRemoteVideoOn(true);
+  }, [localStream]);
 
   // Mutes/unmutes the outgoing video track without renegotiating the
-  // connection — the remote side just sees a frozen/black frame while off.
+  // connection, and tells the other peer so they can show a
+  // "camera off" placeholder instead of a frozen frame.
   const toggleVideo = useCallback(() => {
     if (!localStream) return;
     const videoTrack = localStream.getVideoTracks()[0];
     if (!videoTrack) return;
     videoTrack.enabled = !videoTrack.enabled;
     setVideoOn(videoTrack.enabled);
+
+    if (remoteUserIdRef.current) {
+      socketRef.current?.emit("call:video-toggle", {
+        receiverId: remoteUserIdRef.current,
+        videoOn: videoTrack.enabled,
+      });
+    }
   }, [localStream]);
 
   useEffect(() => {
@@ -172,24 +189,33 @@ export function useCall(currentUserId) {
       }
     });
 
+    socket.on("call:video-toggle", ({ videoOn: peerVideoOn }) => {
+      setRemoteVideoOn(peerVideoOn);
+    });
+
     socket.on("call:end", () => {
       pcRef.current?.close();
       pcRef.current = null;
       pendingCandidatesRef.current = [];
-      localStream?.getTracks().forEach((t) => t.stop());
-      setLocalStream(null);
+      setLocalStream((prev) => {
+        prev?.getTracks().forEach((t) => t.stop());
+        return null;
+      });
       setRemoteStream(null);
       setRemoteUserId(null);
       setCallStatus("idle");
+      setVideoOn(true);
+      setRemoteVideoOn(true);
     });
 
     return () => {
       socket.off("call:offer");
       socket.off("call:answer");
       socket.off("call:ice-candidate");
+      socket.off("call:video-toggle");
       socket.off("call:end");
     };
-  }, [createPeerConnection, localStream]);
+  }, [createPeerConnection]);
 
   return {
     callStatus,
@@ -197,6 +223,7 @@ export function useCall(currentUserId) {
     localStream,
     remoteStream,
     videoOn,
+    remoteVideoOn,
     startCall,
     answerCall,
     endCall,
