@@ -11,6 +11,34 @@ const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥"
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 const toAbsoluteUrl = (relativeUrl) => `${SERVER_URL}${relativeUrl}`;
 
+const AVATAR_COLORS = ["#d4af37", "#c9a961", "#b8935a", "#e0c068", "#a68a52", "#cbb26a"];
+
+function avatarColor(username) {
+  let hash = 0;
+  for (const ch of username || "?") hash = ch.charCodeAt(0) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function initial(username) {
+  return (username || "?").charAt(0).toUpperCase();
+}
+
+function formatTime(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function dayLabel(iso) {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  const sameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, today)) return "Today";
+  if (sameDay(d, yesterday)) return "Yesterday";
+  return d.toLocaleDateString([], { month: "long", day: "numeric" });
+}
+
 function renderMessageContent(message) {
   if (message.type !== "image" && message.type !== "file") {
     return message.content;
@@ -41,6 +69,7 @@ export default function Chat() {
   const navigate = useNavigate();
 
   const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [onlineIds, setOnlineIds] = useState([]);
   const [activeUser, setActiveUser] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -65,9 +94,6 @@ export default function Chat() {
 
     socket.on("presence:update", (ids) => setOnlineIds(ids));
 
-    // Server echoes every sent message back to the sender too, so this is
-    // the ONLY place messages get added to state — no optimistic append,
-    // to avoid duplicates.
     socket.on("message:new", (msg) => {
       const openUser = activeUserRef.current;
       const belongsToOpenChat =
@@ -86,9 +112,7 @@ export default function Chat() {
     socket.on("message:seen", ({ byUserId }) => {
       setMessages((prev) =>
         prev.map((m) =>
-          m.sender_id === me.id && m.receiver_id === byUserId
-            ? { ...m, seen: true }
-            : m
+          m.sender_id === me.id && m.receiver_id === byUserId ? { ...m, seen: true } : m
         )
       );
     });
@@ -104,7 +128,11 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
-    api.getUsers().then(setUsers).catch((err) => console.error("Failed to load users", err));
+    api
+      .getUsers()
+      .then(setUsers)
+      .catch((err) => console.error("Failed to load users", err))
+      .finally(() => setLoadingUsers(false));
   }, []);
 
   useEffect(() => {
@@ -173,25 +201,58 @@ export default function Chat() {
     navigate("/login");
   };
 
+  // Build render items: day dividers + messages, with grouping metadata
+  const items = [];
+  messages.forEach((m, i) => {
+    const prev = messages[i - 1];
+    const newDay = !prev || dayLabel(m.created_at) !== dayLabel(prev.created_at);
+    if (newDay) items.push({ kind: "divider", label: dayLabel(m.created_at), key: `d-${i}` });
+    const grouped =
+      !newDay && prev && prev.sender_id === m.sender_id &&
+      new Date(m.created_at) - new Date(prev.created_at) < 5 * 60 * 1000;
+    items.push({ kind: "message", data: m, grouped, key: m.id || `m-${i}` });
+  });
+
   return (
-    <div className="chat-page">
+    <div className={`chat-page ${activeUser ? "chat-open" : ""}`}>
       <aside className="user-list">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-          <h3 style={{ margin: 0 }}>Chats</h3>
-          <button onClick={handleLogout} title="Log out" style={{ background: "none", border: "none", color: "#d4af37", cursor: "pointer", fontSize: 13 }}>
+        <div className="sidebar-header">
+          <h3>Chats</h3>
+          <button className="logout-btn" onClick={handleLogout}>
             Logout
           </button>
         </div>
-        {users.map((u) => (
-          <div
-            key={u.id}
-            className={`user-item ${activeUser?.id === u.id ? "active" : ""}`}
-            onClick={() => setActiveUser(u)}
-          >
-            <span className={`status-dot ${onlineIds.includes(u.id) ? "online" : ""}`} />
-            {u.username}
-          </div>
-        ))}
+
+        {loadingUsers &&
+          [1, 2, 3].map((i) => (
+            <div className="list-skeleton" key={i}>
+              <div className="skeleton-circle" />
+              <div className="skeleton-line" />
+            </div>
+          ))}
+
+        {!loadingUsers &&
+          users.map((u) => (
+            <div
+              key={u.id}
+              className={`user-item ${activeUser?.id === u.id ? "active" : ""}`}
+              onClick={() => setActiveUser(u)}
+            >
+              <div className="avatar" style={{ background: avatarColor(u.username) }}>
+                {initial(u.username)}
+              </div>
+              <div className="user-item-info">
+                <span className="user-item-name">{u.username}</span>
+                <span className="user-item-status">
+                  {onlineIds.includes(u.id) ? "Online" : "Offline"}
+                </span>
+              </div>
+              <span
+                className={`status-dot ${onlineIds.includes(u.id) ? "online" : ""}`}
+                style={{ marginLeft: "auto" }}
+              />
+            </div>
+          ))}
       </aside>
 
       <main className="chat-window">
@@ -200,7 +261,20 @@ export default function Chat() {
         ) : (
           <>
             <header className="chat-header">
-              <span>{activeUser.username}</span>
+              <button className="back-btn" onClick={() => setActiveUser(null)}>
+                ←
+              </button>
+              <div className="chat-header-info">
+                <div className="avatar" style={{ background: avatarColor(activeUser.username), width: 32, height: 32 }}>
+                  {initial(activeUser.username)}
+                </div>
+                <div>
+                  <span className="chat-header-name">{activeUser.username}</span>
+                  <span className="chat-header-status">
+                    {onlineIds.includes(activeUser.id) ? "Online" : "Offline"}
+                  </span>
+                </div>
+              </div>
               <CallWindow
                 currentUserId={me.id}
                 targetUserId={activeUser.id}
@@ -209,14 +283,44 @@ export default function Chat() {
             </header>
 
             <div className="message-list">
-              {messages.map((m, i) => (
-                <div
-                  key={m.id || i}
-                  className={`message ${m.sender_id === me.id ? "sent" : "received"}`}
-                >
-                  {renderMessageContent(m)}
-                </div>
-              ))}
+              {items.map((item) => {
+                if (item.kind === "divider") {
+                  return (
+                    <div className="day-divider" key={item.key}>
+                      {item.label}
+                    </div>
+                  );
+                }
+                const m = item.data;
+                const isMine = m.sender_id === me.id;
+                const person = isMine ? me : activeUser;
+                return (
+                  <div
+                    key={item.key}
+                    className={`message-row ${isMine ? "sent" : ""} ${item.grouped ? "grouped" : ""}`}
+                  >
+                    {!isMine && (
+                      <div
+                        className={`message-row-avatar ${item.grouped ? "spacer" : ""}`}
+                        style={{ background: avatarColor(person.username) }}
+                      >
+                        {initial(person.username)}
+                      </div>
+                    )}
+                    <div className="message-col">
+                      <div className={`message ${isMine ? "sent" : "received"}`}>
+                        {renderMessageContent(m)}
+                      </div>
+                      {!item.grouped && (
+                        <span className="message-meta">
+                          {formatTime(m.created_at)}
+                          {isMine && m.seen ? " · Seen" : ""}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
               <div ref={bottomRef} />
             </div>
 
@@ -248,7 +352,9 @@ export default function Chat() {
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
                 placeholder="Type a message..."
               />
-              <button onClick={handleSend}>Send</button>
+              <button onClick={handleSend} disabled={!draft.trim()}>
+                Send
+              </button>
             </div>
           </>
         )}
