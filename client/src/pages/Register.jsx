@@ -27,7 +27,7 @@ export default function Register() {
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1 className="wordmark">Whisper</h1>
+        <h1 className="wordmark">Themartiane</h1>
         <p className="tagline">Create your account.</p>
 
         <label>Username</label>
