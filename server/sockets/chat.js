@@ -1,10 +1,50 @@
 import jwt from "jsonwebtoken";
 import db from "../db.js";
 import { JWT_SECRET } from "../middleware/auth.js";
+import webpush from "../push.js";
 
 // Tracks which socket belongs to which user, so we know where to deliver messages.
 // { userId: socketId }
 const onlineUsers = new Map();
+
+// Tracks whether each online user currently has the app tab focused/visible,
+// and which conversation (if any) they have open. Used to decide whether a
+// new message needs a push notification, the same way WhatsApp/etc only
+// notify you for chats you're not actively looking at.
+// { userId: { focused: boolean, openWith: userId|null } }
+const presenceState = new Map();
+
+async function sendPushToUser(userId, payload) {
+  await db.read();
+  const subs = db.data.pushSubscriptions.filter((s) => s.userId === userId);
+  if (subs.length === 0) return;
+
+  const body = JSON.stringify(payload);
+  let changed = false;
+
+  await Promise.all(
+    subs.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: sub.keys },
+          body
+        );
+      } catch (err) {
+        // 404/410 means the subscription is dead (browser cleared it, etc.) — clean it up.
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          db.data.pushSubscriptions = db.data.pushSubscriptions.filter(
+            (s) => s.endpoint !== sub.endpoint
+          );
+          changed = true;
+        } else {
+          console.error("Push send failed:", err.message);
+        }
+      }
+    })
+  );
+
+  if (changed) await db.write();
+}
 
 export function setupChatSocket(io) {
   // Verify the JWT before allowing a socket connection
@@ -22,7 +62,14 @@ export function setupChatSocket(io) {
   io.on("connection", (socket) => {
     const userId = socket.user.id;
     onlineUsers.set(userId, socket.id);
+    presenceState.set(userId, { focused: true, openWith: null });
     io.emit("presence:update", Array.from(onlineUsers.keys()));
+
+    // Client reports tab focus + which conversation is open, so we know
+    // whether a new message needs a push or they're already looking at it.
+    socket.on("presence:focus", ({ focused, openWith }) => {
+      presenceState.set(userId, { focused: !!focused, openWith: openWith ?? null });
+    });
 
     // --- Text / media / sticker messages ---
     socket.on("message:send", async ({ receiverId, type, content }) => {
@@ -50,6 +97,26 @@ export function setupChatSocket(io) {
       }
       // Echo back to sender so their own UI updates
       socket.emit("message:new", message);
+
+      // Decide whether the receiver needs a push notification: skip it only
+      // if they're online, tab-focused, AND already looking at this exact
+      // conversation — otherwise (offline, backgrounded, or on a different
+      // chat) they wouldn't see the message land, so we notify.
+      const receiverPresence = presenceState.get(receiverId);
+      const alreadySeeing =
+        receiverSocketId &&
+        receiverPresence?.focused &&
+        receiverPresence?.openWith === userId;
+
+      if (!alreadySeeing) {
+        const sender = db.data.users.find((u) => u.id === userId);
+        sendPushToUser(receiverId, {
+          title: sender?.username || "New message",
+          body: type === "text" ? content : "Sent you something",
+          senderId: userId,
+          senderName: sender?.username,
+        }).catch((err) => console.error("Push error:", err));
+      }
     });
 
     // --- WebRTC call signaling (used in Phase 4) ---
@@ -83,8 +150,8 @@ export function setupChatSocket(io) {
 
     socket.on("disconnect", () => {
       onlineUsers.delete(userId);
+      presenceState.delete(userId);
       io.emit("presence:update", Array.from(onlineUsers.keys()));
     });
   });
 }
-
