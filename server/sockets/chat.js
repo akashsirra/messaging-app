@@ -59,11 +59,17 @@ export function setupChatSocket(io) {
       presenceState.set(userId, { focused: !!focused, openWith: openWith ?? null });
     });
 
-    socket.on("message:send", async ({ receiverId, type, content }) => {
+    socket.on("message:send", async ({ receiverId, type, content, burnAfter }) => {
       await db.read();
       const id = db.data.messages.length
         ? Math.max(...db.data.messages.map((m) => m.id)) + 1
         : 1;
+
+      const now = new Date();
+      const expiresAt =
+        typeof burnAfter === "number" && burnAfter > 0
+          ? new Date(now.getTime() + burnAfter).toISOString()
+          : null;
 
       const message = {
         id,
@@ -71,7 +77,9 @@ export function setupChatSocket(io) {
         receiver_id: receiverId,
         type: type || "text",
         content,
-        created_at: new Date().toISOString(),
+        created_at: now.toISOString(),
+        expires_at: expiresAt,
+        seen: false,
       };
 
       db.data.messages.push(message);
@@ -100,7 +108,17 @@ export function setupChatSocket(io) {
       }
     });
 
-    socket.on("message:seen", ({ otherUserId }) => {
+    socket.on("message:seen", async ({ otherUserId }) => {
+      await db.read();
+      let changed = false;
+      db.data.messages.forEach((m) => {
+        if (m.sender_id === otherUserId && m.receiver_id === userId && !m.seen) {
+          m.seen = true;
+          changed = true;
+        }
+      });
+      if (changed) await db.write();
+
       const otherSocketId = onlineUsers.get(otherUserId);
       if (otherSocketId) {
         io.to(otherSocketId).emit("message:seen", { byUserId: userId });
@@ -143,4 +161,29 @@ export function setupChatSocket(io) {
       }
     });
   });
+
+  setInterval(async () => {
+    await db.read();
+    const now = Date.now();
+    const expired = db.data.messages.filter(
+      (m) => m.expires_at && new Date(m.expires_at).getTime() <= now
+    );
+    if (expired.length === 0) return;
+
+    const expiredIds = expired.map((m) => m.id);
+    db.data.messages = db.data.messages.filter((m) => !expiredIds.includes(m.id));
+    await db.write();
+
+    const byUserPair = new Map();
+    for (const m of expired) {
+      for (const uid of [m.sender_id, m.receiver_id]) {
+        if (!byUserPair.has(uid)) byUserPair.set(uid, []);
+        byUserPair.get(uid).push(m.id);
+      }
+    }
+    for (const [uid, ids] of byUserPair) {
+      const socketId = onlineUsers.get(uid);
+      if (socketId) io.to(socketId).emit("message:deleted", { ids });
+    }
+  }, 15000);
 }
