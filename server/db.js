@@ -8,13 +8,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const file = path.join(__dirname, "messaging-app-data.json");
 
 const adapter = new JSONFile(file);
-const defaultData = { users: [], messages: [], pushSubscriptions: [] };
+const defaultData = { users: [], messages: [], pushSubscriptions: [], contacts: [] };
 
 const db = new Low(adapter, defaultData);
 
 await db.read();
 db.data ||= defaultData;
 db.data.pushSubscriptions ||= [];
+db.data.contacts ||= [];
 await db.write();
 
 export default db;
