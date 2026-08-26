@@ -34,3 +34,22 @@ export default function Login() {
         <input value={username} onChange={(e) => setUsername(e.target.value)} required />
 
         <label>Password</label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+
+        {error && <p className="error">{error}</p>}
+
+        <button type="submit" disabled={loading}>
+          {loading ? "Logging in..." : "Log in"}
+        </button>
+        <p className="switch">
+          No account? <Link to="/register">Create one</Link>
+        </p>
+      </form>
+    </div>
+  );
+}
