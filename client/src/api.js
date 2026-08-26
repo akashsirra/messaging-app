@@ -22,6 +22,11 @@ export const api = {
     request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   getUsers: () => request("/auth/users"),
   getHistory: (otherUserId) => request(`/messages/${otherUserId}`),
+  getVapidPublicKey: () => request("/push/vapid-public-key"),
+  subscribePush: (subscription) =>
+    request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) }),
+  unsubscribePush: (endpoint) =>
+    request("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) }),
   // File upload can't use the JSON `request` helper above since it needs
   // multipart/form-data, not a JSON body.
   uploadFile: async (file) => {
