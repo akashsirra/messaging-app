@@ -27,8 +27,8 @@ export default function Login() {
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1 className="wordmark">Themartiane</h1>
-        <p className="tagline">Private messaging, on your own server.</p>
+        <h1 className="wordmark">Martiane</h1>
+        <p className="tagline">Say it. Then let it go.</p>
 
         <label>Username</label>
         <input value={username} onChange={(e) => setUsername(e.target.value)} required />
