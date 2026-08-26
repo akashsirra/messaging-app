@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { connectSocket, getSocket } from "../socket.js";
 import { setupPushNotifications } from "../push.js";
 import CallWindow from "../CallWindow";
+import { getMoodScore, moodToColors } from "../utils/mood";
 import "./Chat.css";
 
 const STICKERS = ["😀", "😂", "😍", "😎", "🥳", " 😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
@@ -127,6 +128,7 @@ export default function Chat() {
   const [onlineIds, setOnlineIds] = useState([]);
   const [activeUser, setActiveUser] = useState(null);
   const [messages, setMessages] = useState([]);
+  const moodColors = useMemo(() => moodToColors(getMoodScore(messages)), [messages]);
   const [draft, setDraft] = useState("");
   const [showStickers, setShowStickers] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -478,7 +480,7 @@ export default function Chat() {
         )}
       </aside>
 
-      <main className="chat-window">
+      <main className="chat-window" style={{ backgroundColor: moodColors.bg, "--mood-accent": moodColors.accent, transition: "background-color 1.2s ease" }}>
         {!activeUser ? (
           <div className="empty-state">Select a chat to start messaging</div>
         ) : (
