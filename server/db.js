@@ -1,4 +1,5 @@
 import pg from "pg";
+
 const { Pool } = pg;
 
 const pool = new Pool({
@@ -26,8 +27,14 @@ async function init() {
       content TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       expires_at TIMESTAMPTZ,
+      unlock_at TIMESTAMPTZ,
       seen BOOLEAN NOT NULL DEFAULT false
     );
+  `);
+
+  // In case the table already existed from before this column was added.
+  await pool.query(`
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS unlock_at TIMESTAMPTZ;
   `);
 
   await pool.query(`
