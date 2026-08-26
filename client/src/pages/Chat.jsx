@@ -66,6 +66,11 @@ export default function Chat() {
 
   // Connect socket once on mount
   useEffect(() => {
+    if (!me) {
+      navigate("/login");
+      return;
+    }
+
     const socket = connectSocket();
 
     socket.on("presence:update", (ids) => setOnlineIds(ids));
@@ -100,22 +105,26 @@ export default function Chat() {
       socket.off("presence:update");
       socket.off("message:new");
       socket.off("message:seen");
+      socket.disconnect();
     };
   }, []);
 
   // Load the user list once
   useEffect(() => {
-    api.get("/users").then((res) => setUsers(res.data));
+    api.getUsers().then(setUsers).catch((err) => console.error("Failed to load users", err));
   }, []);
 
   // Load message history whenever the active conversation changes
   useEffect(() => {
     if (!activeUser) return;
-    api.get(`/messages/${activeUser.id}`).then((res) => {
-      setMessages(res.data);
-      const socket = getSocket();
-      socket.emit("message:seen", { otherUserId: activeUser.id });
-    });
+    api
+      .getHistory(activeUser.id)
+      .then((history) => {
+        setMessages(history);
+        const socket = getSocket();
+        socket?.emit("message:seen", { otherUserId: activeUser.id });
+      })
+      .catch((err) => console.error("Failed to load history", err));
   }, [activeUser]);
 
   useEffect(() => {
@@ -155,16 +164,14 @@ export default function Chat() {
     if (!file || !activeUser) return;
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await api.post("/upload", formData);
+      const { url } = await api.uploadFile(file);
       const isImage = file.type.startsWith("image/");
       const socket = getSocket();
       const msg = {
         sender_id: me.id,
         receiver_id: activeUser.id,
         type: isImage ? "image" : "file",
-        content: JSON.stringify({ url: res.data.url, filename: file.name }),
+        content: JSON.stringify({ url, filename: file.name }),
       };
       socket.emit("message:send", msg);
       setMessages((prev) => [...prev, msg]);
