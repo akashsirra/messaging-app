@@ -145,6 +145,12 @@ export function setupChatSocket(io) {
         io.to(receiverSocketId).emit("call:ice-candidate", { from: userId, candidate });
       }
     });
+    socket.on("call:video-toggle", ({ receiverId, videoOn }) => {
+      const receiverSocketId = onlineUsers.get(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("call:video-toggle", { from: userId, videoOn });
+      }
+    });
 
     socket.on("call:end", ({ receiverId }) => {
       const receiverSocketId = onlineUsers.get(receiverId);
