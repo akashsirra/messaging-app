@@ -6,14 +6,19 @@ import { setupPushNotifications } from "../push.js";
 import CallWindow from "../CallWindow";
 import "./Chat.css";
 
-const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
+const STICKERS = ["😀", "😂", "😍", "😎", "🥳", " 😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 const toAbsoluteUrl = (relativeUrl) => `${SERVER_URL}${relativeUrl}`;
 
-// Fixed 24h burn window — kept as a single toggle rather than a menu of
-// durations, to match the minimal-by-design brief.
 const BURN_DURATION_MS = 24 * 60 * 60 * 1000;
+
+const CAPSULE_DURATIONS = [
+  { label: "1 hour", ms: 60 * 60 * 1000 },
+  { label: "24 hours", ms: 24 * 60 * 60 * 1000 },
+  { label: "3 days", ms: 3 * 24 * 60 * 60 * 1000 },
+  { label: "1 week", ms: 7 * 24 * 60 * 60 * 1000 },
+];
 
 const AVATAR_COLORS = ["#4fd1c5", "#ff7a45", "#8a8aff", "#5fd98a", "#e0c341", "#ff6b9d"];
 
@@ -43,7 +48,6 @@ function dayLabel(iso) {
   return d.toLocaleDateString([], { month: "long", day: "numeric" });
 }
 
-// Renders a countdown like "3h left" / "12m left" / "40s left" for burn messages.
 function burnCountdown(expiresAt, now) {
   const msLeft = new Date(expiresAt).getTime() - now;
   if (msLeft <= 0) return "0s left";
@@ -53,6 +57,19 @@ function burnCountdown(expiresAt, now) {
   if (m < 60) return `${m}m left`;
   const h = Math.floor(m / 60);
   return `${h}h left`;
+}
+
+function capsuleCountdown(unlockAt, now) {
+  const msLeft = new Date(unlockAt).getTime() - now;
+  if (msLeft <= 0) return "unlocking…";
+  const s = Math.floor(msLeft / 1000);
+  if (s < 60) return `unlocks in ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `unlocks in ${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `unlocks in ${h}h`;
+  const d = Math.floor(h / 24);
+  return `unlocks in ${d}d`;
 }
 
 function renderMessageContent(message) {
@@ -98,6 +115,8 @@ export default function Chat() {
   const [newContactName, setNewContactName] = useState("");
   const [addContactError, setAddContactError] = useState("");
   const [addingContact, setAddingContact] = useState(false);
+  const [capsuleDurationMs, setCapsuleDurationMs] = useState(null);
+  const [showCapsuleMenu, setShowCapsuleMenu] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
@@ -129,7 +148,6 @@ export default function Chat() {
     };
   }, []);
 
-  // Ticks once a second so burn countdowns stay live without re-fetching.
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
@@ -160,6 +178,35 @@ export default function Chat() {
       }
     });
 
+    socket.on("capsule:incoming", ({ id, senderId, unlockAt }) => {
+      const openUser = activeUserRef.current;
+      const belongsToOpenChat = openUser && senderId === openUser.id;
+      if (!belongsToOpenChat) return;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id,
+          sender_id: senderId,
+          receiver_id: me.id,
+          type: "text",
+          content: null,
+          created_at: new Date().toISOString(),
+          expires_at: null,
+          unlock_at: unlockAt,
+          seen: false,
+          _locked: true,
+        },
+      ]);
+    });
+
+    socket.on("capsule:unlocked", (msg) => {
+      setMessages((prev) =>
+        prev.some((m) => m.id === msg.id)
+          ? prev.map((m) => (m.id === msg.id ? { ...msg, _locked: false } : m))
+          : prev
+      );
+    });
+
     socket.on("message:seen", ({ byUserId }) => {
       setMessages((prev) =>
         prev.map((m) =>
@@ -168,8 +215,6 @@ export default function Chat() {
       );
     });
 
-    // Server tells us a burn timer expired — play a brief ash-out
-    // animation, then drop the message from view.
     socket.on("message:deleted", ({ ids }) => {
       setExpiringIds((prev) => [...prev, ...ids]);
       setTimeout(() => {
@@ -178,13 +223,10 @@ export default function Chat() {
       }, 480);
     });
 
-    // Someone messaged us who wasn't in our contacts yet — the server
-    // auto-added them so they show up here instead of vanishing.
     socket.on("contact:added", (contact) => {
       setUsers((prev) => (prev.some((u) => u.id === contact.id) ? prev : [...prev, contact]));
     });
 
-    // Either side deleted the chat — clear it live if it's currently open.
     socket.on("chat:deleted", ({ byUserId }) => {
       const openUser = activeUserRef.current;
       if (openUser && openUser.id === byUserId) {
@@ -197,6 +239,8 @@ export default function Chat() {
     return () => {
       socket.off("presence:update");
       socket.off("message:new");
+      socket.off("capsule:incoming");
+      socket.off("capsule:unlocked");
       socket.off("message:seen");
       socket.off("message:deleted");
       socket.off("contact:added");
@@ -229,6 +273,9 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const computeUnlockAt = () =>
+    capsuleDurationMs ? new Date(Date.now() + capsuleDurationMs).toISOString() : null;
+
   const handleSend = () => {
     if (!draft.trim() || !activeUser) return;
     const socket = getSocket();
@@ -237,6 +284,7 @@ export default function Chat() {
       type: "text",
       content: draft.trim(),
       burnAfter: burnMode ? BURN_DURATION_MS : null,
+      unlockAt: computeUnlockAt(),
     });
     setDraft("");
   };
@@ -249,6 +297,7 @@ export default function Chat() {
       type: "text",
       content: emoji,
       burnAfter: burnMode ? BURN_DURATION_MS : null,
+      unlockAt: computeUnlockAt(),
     });
     setShowStickers(false);
   };
@@ -266,6 +315,7 @@ export default function Chat() {
         type: isImage ? "image" : "file",
         content: JSON.stringify({ url, filename: file.name }),
         burnAfter: burnMode ? BURN_DURATION_MS : null,
+        unlockAt: computeUnlockAt(),
       });
     } catch (err) {
       console.error("Upload failed", err);
@@ -299,7 +349,7 @@ export default function Chat() {
   };
 
   const handleDeleteContact = async (e, contact) => {
-    e.stopPropagation(); // don't also trigger opening the chat
+    e.stopPropagation();
     if (!window.confirm(`Remove ${contact.username} from your contacts?`)) return;
     try {
       await api.deleteContact(contact.id);
@@ -332,6 +382,10 @@ export default function Chat() {
       new Date(m.created_at) - new Date(prev.created_at) < 5 * 60 * 1000;
     items.push({ kind: "message", data: m, grouped, key: m.id || `m-${i}` });
   });
+
+  const capsuleLabel = capsuleDurationMs
+    ? CAPSULE_DURATIONS.find((d) => d.ms === capsuleDurationMs)?.label
+    : null;
 
   return (
     <div className={`chat-page ${activeUser ? "chat-open" : ""}`}>
@@ -427,6 +481,40 @@ export default function Chat() {
               >
                 🔥
               </button>
+              <div style={{ position: "relative" }}>
+                <button
+                  className={`burn-toggle ${capsuleDurationMs ? "active" : ""}`}
+                  onClick={() => setShowCapsuleMenu((s) => !s)}
+                  title={capsuleLabel ? `Time Capsule: ${capsuleLabel} — click to change` : "Send as a Time Capsule"}
+                >
+                  ⏳
+                </button>
+                {showCapsuleMenu && (
+                  <div className="sticker-picker" style={{ right: 0, left: "auto", minWidth: 140 }}>
+                    {CAPSULE_DURATIONS.map((d) => (
+                      <div
+                        key={d.label}
+                        style={{ padding: "6px 10px", cursor: "pointer", whiteSpace: "nowrap" }}
+                        onClick={() => {
+                          setCapsuleDurationMs(d.ms);
+                          setShowCapsuleMenu(false);
+                        }}
+                      >
+                        {d.label}
+                      </div>
+                    ))}
+                    <div
+                      style={{ padding: "6px 10px", cursor: "pointer", opacity: 0.7 }}
+                      onClick={() => {
+                        setCapsuleDurationMs(null);
+                        setShowCapsuleMenu(false);
+                      }}
+                    >
+                      Off
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 className="delete-chat-btn"
                 onClick={handleDeleteChat}
@@ -444,6 +532,9 @@ export default function Chat() {
             {burnMode && (
               <div className="burn-banner">New messages in this chat will burn 24h after sending</div>
             )}
+            {capsuleLabel && (
+              <div className="burn-banner">New messages will stay locked for {capsuleLabel} 🔒</div>
+            )}
 
             <div className="message-list">
               {items.map((item) => {
@@ -459,6 +550,8 @@ export default function Chat() {
                 const person = isMine ? me : activeUser;
                 const isBurning = !!m.expires_at;
                 const isExpiring = expiringIds.includes(m.id);
+                const isLockedCapsule =
+                  !isMine && m.unlock_at && new Date(m.unlock_at) > now;
                 let fusePct = null;
                 if (isBurning) {
                   const total = new Date(m.expires_at) - new Date(m.created_at);
@@ -480,7 +573,13 @@ export default function Chat() {
                     )}
                     <div className="message-col">
                       <div className={`message ${isMine ? "sent" : "received"} ${isBurning ? "burning" : ""}`}>
-                        {renderMessageContent(m)}
+                        {isLockedCapsule ? (
+                          <span style={{ opacity: 0.75 }}>
+                            🔒 Time Capsule — {capsuleCountdown(m.unlock_at, now)}
+                          </span>
+                        ) : (
+                          renderMessageContent(m)
+                        )}
                         {isBurning && fusePct !== null && (
                           <span className="burn-fuse" style={{ width: `${fusePct}%` }} />
                         )}
@@ -491,6 +590,11 @@ export default function Chat() {
                           {isMine && m.seen && <span className="seen">· seen</span>}
                           {isBurning && (
                             <span className="burn-countdown">· 🔥 {burnCountdown(m.expires_at, now)}</span>
+                          )}
+                          {m.unlock_at && isMine && (
+                            <span className="burn-countdown">
+                              · ⏳ {new Date(m.unlock_at) > now ? capsuleCountdown(m.unlock_at, now) : "unlocked"}
+                            </span>
                           )}
                         </span>
                       )}
