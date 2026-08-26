@@ -8,18 +8,15 @@ router.get("/:otherUserId", requireAuth, async (req, res) => {
   const me = req.user.id;
   const other = Number(req.params.otherUserId);
 
-  await db.read();
-  const now = Date.now();
-  const messages = db.data.messages
-    .filter(
-      (m) =>
-        ((m.sender_id === me && m.receiver_id === other) ||
-          (m.sender_id === other && m.receiver_id === me)) &&
-        (!m.expires_at || new Date(m.expires_at).getTime() > now)
-    )
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const result = await db.query(
+    `SELECT * FROM messages
+     WHERE ((sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1))
+       AND (expires_at IS NULL OR expires_at > now())
+     ORDER BY created_at ASC`,
+    [me, other]
+  );
 
-  res.json(messages);
+  res.json(result.rows);
 });
 
 export default router;
