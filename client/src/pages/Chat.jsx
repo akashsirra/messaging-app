@@ -8,27 +8,20 @@ import "./Chat.css";
 
 const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
 
-// Uploaded files come back as a server-relative path like "/uploads/xyz.png" —
-// this makes it an absolute URL the <img>/<a> tags can actually load.
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 const toAbsoluteUrl = (relativeUrl) => `${SERVER_URL}${relativeUrl}`;
 
-// Text/sticker messages store their content as a plain string; image/file
-// messages store it as JSON ({ url, filename }) since they need both.
 function renderMessageContent(message) {
   if (message.type !== "image" && message.type !== "file") {
     return message.content;
   }
-
   let url, filename;
   try {
     ({ url, filename } = JSON.parse(message.content));
   } catch {
     return "[Attachment unavailable]";
   }
-
   const fullUrl = toAbsoluteUrl(url);
-
   if (message.type === "image") {
     return (
       <a href={fullUrl} target="_blank" rel="noreferrer">
@@ -36,7 +29,6 @@ function renderMessageContent(message) {
       </a>
     );
   }
-
   return (
     <a href={fullUrl} target="_blank" rel="noreferrer" className="shared-file">
       📎 {filename || "Download file"}
@@ -59,13 +51,10 @@ export default function Chat() {
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
 
-  // Keep a ref in sync with activeUser so socket callbacks (registered once
-  // on mount) always see the latest selection instead of a stale closure.
   useEffect(() => {
     activeUserRef.current = activeUser;
   }, [activeUser]);
 
-  // Connect socket once on mount
   useEffect(() => {
     if (!me) {
       navigate("/login");
@@ -76,15 +65,19 @@ export default function Chat() {
 
     socket.on("presence:update", (ids) => setOnlineIds(ids));
 
+    // Server echoes every sent message back to the sender too, so this is
+    // the ONLY place messages get added to state — no optimistic append,
+    // to avoid duplicates.
     socket.on("message:new", (msg) => {
       const openUser = activeUserRef.current;
       const belongsToOpenChat =
         openUser && (msg.sender_id === openUser.id || msg.receiver_id === openUser.id);
+      const involvesMe = msg.sender_id === me.id || msg.receiver_id === me.id;
 
-      setMessages((prev) => (belongsToOpenChat ? [...prev, msg] : prev));
+      if (involvesMe) {
+        setMessages((prev) => (belongsToOpenChat ? [...prev, msg] : prev));
+      }
 
-      // If the message just arrived from the person we're actively looking
-      // at, mark it seen right away instead of waiting for a chat switch.
       if (belongsToOpenChat && msg.sender_id === openUser.id) {
         socket.emit("message:seen", { otherUserId: openUser.id });
       }
@@ -110,12 +103,10 @@ export default function Chat() {
     };
   }, []);
 
-  // Load the user list once
   useEffect(() => {
     api.getUsers().then(setUsers).catch((err) => console.error("Failed to load users", err));
   }, []);
 
-  // Load message history whenever the active conversation changes
   useEffect(() => {
     if (!activeUser) return;
     api
@@ -132,31 +123,25 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!draft.trim() || !activeUser) return;
     const socket = getSocket();
-    const msg = {
-      sender_id: me.id,
-      receiver_id: activeUser.id,
+    socket.emit("message:send", {
+      receiverId: activeUser.id,
       type: "text",
       content: draft.trim(),
-    };
-    socket.emit("message:send", msg);
-    setMessages((prev) => [...prev, msg]);
+    });
     setDraft("");
   };
 
   const handleStickerPick = (emoji) => {
     if (!activeUser) return;
     const socket = getSocket();
-    const msg = {
-      sender_id: me.id,
-      receiver_id: activeUser.id,
+    socket.emit("message:send", {
+      receiverId: activeUser.id,
       type: "text",
       content: emoji,
-    };
-    socket.emit("message:send", msg);
-    setMessages((prev) => [...prev, msg]);
+    });
     setShowStickers(false);
   };
 
@@ -168,14 +153,11 @@ export default function Chat() {
       const { url } = await api.uploadFile(file);
       const isImage = file.type.startsWith("image/");
       const socket = getSocket();
-      const msg = {
-        sender_id: me.id,
-        receiver_id: activeUser.id,
+      socket.emit("message:send", {
+        receiverId: activeUser.id,
         type: isImage ? "image" : "file",
         content: JSON.stringify({ url, filename: file.name }),
-      };
-      socket.emit("message:send", msg);
-      setMessages((prev) => [...prev, msg]);
+      });
     } catch (err) {
       console.error("Upload failed", err);
     } finally {
@@ -184,10 +166,22 @@ export default function Chat() {
     }
   };
 
+  const handleLogout = () => {
+    getSocket()?.disconnect();
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/login");
+  };
+
   return (
     <div className="chat-page">
       <aside className="user-list">
-        <h3>Chats</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+          <h3 style={{ margin: 0 }}>Chats</h3>
+          <button onClick={handleLogout} title="Log out" style={{ background: "none", border: "none", color: "#d4af37", cursor: "pointer", fontSize: 13 }}>
+            Logout
+          </button>
+        </div>
         {users.map((u) => (
           <div
             key={u.id}
