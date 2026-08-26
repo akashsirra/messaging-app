@@ -21,6 +21,7 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
     localStream,
     remoteStream,
     videoOn,
+    remoteVideoOn,
     startCall,
     answerCall,
     endCall,
@@ -71,6 +72,11 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
       {callStatus === "in-call" && (
         <div className="call-video-stage">
           <video ref={remoteVideoRef} autoPlay playsInline className="call-video-remote" />
+          {!remoteVideoOn && (
+            <div className="call-video-off-placeholder">
+              <span>{targetName}'s camera is off</span>
+            </div>
+          )}
           <div className="call-video-local-wrap">
             <video ref={localVideoRef} autoPlay muted playsInline className="call-video-local" />
             {!videoOn && (
