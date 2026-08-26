@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { useCall } from "./useCall";
 import "./CallWindow.css";
 
-const AVATAR_COLORS = ["#8c2f39", "#4f6f52", "#b08d47", "#5b7c99", "#a15843", "#6b4c6b"];
+const AVATAR_COLORS = ["#4fd1c5", "#ff7a45", "#8a8aff", "#5fd98a", "#e0c341", "#ff6b9d"];
 
 function avatarColor(username) {
   let hash = 0;
@@ -20,9 +20,11 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
     callStatus,
     localStream,
     remoteStream,
+    videoOn,
     startCall,
     answerCall,
     endCall,
+    toggleVideo,
   } = useCall(currentUserId);
 
   const localVideoRef = useRef(null);
@@ -69,7 +71,14 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
       {callStatus === "in-call" && (
         <div className="call-video-stage">
           <video ref={remoteVideoRef} autoPlay playsInline className="call-video-remote" />
-          <video ref={localVideoRef} autoPlay muted playsInline className="call-video-local" />
+          <div className="call-video-local-wrap">
+            <video ref={localVideoRef} autoPlay muted playsInline className="call-video-local" />
+            {!videoOn && (
+              <div className="call-video-off-placeholder">
+                <span>Camera off</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -77,6 +86,15 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
         {callStatus === "ringing" && (
           <button className="call-btn accept" onClick={answerCall} title="Answer">
             ✅
+          </button>
+        )}
+        {callStatus === "in-call" && (
+          <button
+            className={`call-btn ${videoOn ? "video-toggle" : "video-toggle off"}`}
+            onClick={toggleVideo}
+            title={videoOn ? "Turn camera off" : "Turn camera on"}
+          >
+            {videoOn ? "📹" : "🚫"}
           </button>
         )}
         <button
