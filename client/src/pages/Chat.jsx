@@ -6,7 +6,7 @@ import { setupPushNotifications } from "../push.js";
 import CallWindow from "../CallWindow";
 import "./Chat.css";
 
-const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
+const STICKERS = ["😀", "😂", "😍", "😎", "🥳", " 😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:4000";
 const toAbsoluteUrl = (relativeUrl) => `${SERVER_URL}${relativeUrl}`;
@@ -14,6 +14,16 @@ const toAbsoluteUrl = (relativeUrl) => `${SERVER_URL}${relativeUrl}`;
 // Fixed 24h burn window — kept as a single toggle rather than a menu of
 // durations, to match the minimal-by-design brief.
 const BURN_DURATION_MS = 24 * 60 * 60 * 1000;
+
+// Time Capsule: message stays locked (hidden from the receiver) until the
+// chosen duration has passed. A small fixed menu of presets, same spirit
+// as the burn toggle above.
+const CAPSULE_DURATIONS = [
+  { label: "1 hour", ms: 60 * 60 * 1000 },
+  { label: "24 hours", ms: 24 * 60 * 60 * 1000 },
+  { label: "3 days", ms: 3 * 24 * 60 * 60 * 1000 },
+  { label: "1 week", ms: 7 * 24 * 60 * 60 * 1000 },
+];
 
 const AVATAR_COLORS = ["#4fd1c5", "#ff7a45", "#8a8aff", "#5fd98a", "#e0c341", "#ff6b9d"];
 
@@ -53,6 +63,20 @@ function burnCountdown(expiresAt, now) {
   if (m < 60) return `${m}m left`;
   const h = Math.floor(m / 60);
   return `${h}h left`;
+}
+
+// Same shape, but counting down to a future unlock instead of a deletion.
+function capsuleCountdown(unlockAt, now) {
+  const msLeft = new Date(unlockAt).getTime() - now;
+  if (msLeft <= 0) return "unlocking…";
+  const s = Math.floor(msLeft / 1000);
+  if (s < 60) return `unlocks in ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `unlocks in ${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `unlocks in ${h}h`;
+  const d = Math.floor(h / 24);
+  return `unlocks in ${d}d`;
 }
 
 function renderMessageContent(message) {
@@ -98,6 +122,8 @@ export default function Chat() {
   const [newContactName, setNewContactName] = useState("");
   const [addContactError, setAddContactError] = useState("");
   const [addingContact, setAddingContact] = useState(false);
+  const [capsuleDurationMs, setCapsuleDurationMs] = useState(null);
+  const [showCapsuleMenu, setShowCapsuleMenu] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
@@ -129,7 +155,7 @@ export default function Chat() {
     };
   }, []);
 
-  // Ticks once a second so burn countdowns stay live without re-fetching.
+  // Ticks once a second so burn/capsule countdowns stay live without re-fetching.
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
@@ -158,6 +184,39 @@ export default function Chat() {
       if (belongsToOpenChat && msg.sender_id === openUser.id) {
         socket.emit("message:seen", { otherUserId: openUser.id });
       }
+    });
+
+    // A locked Time Capsule just arrived — we don't get the real content
+    // yet, just enough to show a locked placeholder with a countdown.
+    socket.on("capsule:incoming", ({ id, senderId, unlockAt }) => {
+      const openUser = activeUserRef.current;
+      const belongsToOpenChat = openUser && senderId === openUser.id;
+      if (!belongsToOpenChat) return;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id,
+          sender_id: senderId,
+          receiver_id: me.id,
+          type: "text",
+          content: null,
+          created_at: new Date().toISOString(),
+          expires_at: null,
+          unlock_at: unlockAt,
+          seen: false,
+          _locked: true,
+        },
+      ]);
+    });
+
+    // Server swept an unlocked capsule and is handing us the real message —
+    // swap the locked placeholder out for the real content in place.
+    socket.on("capsule:unlocked", (msg) => {
+      setMessages((prev) =>
+        prev.some((m) => m.id === msg.id)
+          ? prev.map((m) => (m.id === msg.id ? { ...msg, _locked: false } : m))
+          : prev
+      );
     });
 
     socket.on("message:seen", ({ byUserId }) => {
@@ -197,6 +256,8 @@ export default function Chat() {
     return () => {
       socket.off("presence:update");
       socket.off("message:new");
+      socket.off("capsule:incoming");
+      socket.off("capsule:unlocked");
       socket.off("message:seen");
       socket.off("message:deleted");
       socket.off("contact:added");
@@ -229,6 +290,9 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const computeUnlockAt = () =>
+    capsuleDurationMs ? new Date(Date.now() + capsuleDurationMs).toISOString() : null;
+
   const handleSend = () => {
     if (!draft.trim() || !activeUser) return;
     const socket = getSocket();
@@ -237,6 +301,7 @@ export default function Chat() {
       type: "text",
       content: draft.trim(),
       burnAfter: burnMode ? BURN_DURATION_MS : null,
+      unlockAt: computeUnlockAt(),
     });
     setDraft("");
   };
@@ -249,6 +314,7 @@ export default function Chat() {
       type: "text",
       content: emoji,
       burnAfter: burnMode ? BURN_DURATION_MS : null,
+      unlockAt: computeUnlockAt(),
     });
     setShowStickers(false);
   };
@@ -266,6 +332,7 @@ export default function Chat() {
         type: isImage ? "image" : "file",
         content: JSON.stringify({ url, filename: file.name }),
         burnAfter: burnMode ? BURN_DURATION_MS : null,
+        unlockAt: computeUnlockAt(),
       });
     } catch (err) {
       console.error("Upload failed", err);
@@ -332,6 +399,10 @@ export default function Chat() {
       new Date(m.created_at) - new Date(prev.created_at) < 5 * 60 * 1000;
     items.push({ kind: "message", data: m, grouped, key: m.id || `m-${i}` });
   });
+
+  const capsuleLabel = capsuleDurationMs
+    ? CAPSULE_DURATIONS.find((d) => d.ms === capsuleDurationMs)?.label
+    : null;
 
   return (
     <div className={`chat-page ${activeUser ? "chat-open" : ""}`}>
@@ -427,6 +498,40 @@ export default function Chat() {
               >
                 🔥
               </button>
+              <div style={{ position: "relative" }}>
+                <button
+                  className={`burn-toggle ${capsuleDurationMs ? "active" : ""}`}
+                  onClick={() => setShowCapsuleMenu((s) => !s)}
+                  title={capsuleLabel ? `Time Capsule: ${capsuleLabel} — click to change` : "Send as a Time Capsule"}
+                >
+                  ⏳
+                </button>
+                {showCapsuleMenu && (
+                  <div className="sticker-picker" style={{ right: 0, left: "auto", minWidth: 140 }}>
+                    {CAPSULE_DURATIONS.map((d) => (
+                      <div
+                        key={d.label}
+                        style={{ padding: "6px 10px", cursor: "pointer", whiteSpace: "nowrap" }}
+                        onClick={() => {
+                          setCapsuleDurationMs(d.ms);
+                          setShowCapsuleMenu(false);
+                        }}
+                      >
+                        {d.label}
+                      </div>
+                    ))}
+                    <div
+                      style={{ padding: "6px 10px", cursor: "pointer", opacity: 0.7 }}
+                      onClick={() => {
+                        setCapsuleDurationMs(null);
+                        setShowCapsuleMenu(false);
+                      }}
+                    >
+                      Off
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 className="delete-chat-btn"
                 onClick={handleDeleteChat}
@@ -444,6 +549,9 @@ export default function Chat() {
             {burnMode && (
               <div className="burn-banner">New messages in this chat will burn 24h after sending</div>
             )}
+            {capsuleLabel && (
+              <div className="burn-banner">New messages will stay locked for {capsuleLabel} 🔒</div>
+            )}
 
             <div className="message-list">
               {items.map((item) => {
@@ -459,85 +567,6 @@ export default function Chat() {
                 const person = isMine ? me : activeUser;
                 const isBurning = !!m.expires_at;
                 const isExpiring = expiringIds.includes(m.id);
-                let fusePct = null;
-                if (isBurning) {
-                  const total = new Date(m.expires_at) - new Date(m.created_at);
-                  const remaining = new Date(m.expires_at) - now;
-                  fusePct = Math.max(0, Math.min(100, (remaining / total) * 100));
-                }
-                return (
-                  <div
-                    key={item.key}
-                    className={`message-row ${isMine ? "sent" : ""} ${item.grouped ? "grouped" : ""} ${isExpiring ? "expiring" : ""}`}
-                  >
-                    {!isMine && (
-                      <div
-                        className={`message-row-avatar ${item.grouped ? "spacer" : ""}`}
-                        style={{ background: avatarColor(person.username) }}
-                      >
-                        {initial(person.username)}
-                      </div>
-                    )}
-                    <div className="message-col">
-                      <div className={`message ${isMine ? "sent" : "received"} ${isBurning ? "burning" : ""}`}>
-                        {renderMessageContent(m)}
-                        {isBurning && fusePct !== null && (
-                          <span className="burn-fuse" style={{ width: `${fusePct}%` }} />
-                        )}
-                      </div>
-                      {!item.grouped && (
-                        <span className="message-meta">
-                          <span>{formatTime(m.created_at)}</span>
-                          {isMine && m.seen && <span className="seen">· seen</span>}
-                          {isBurning && (
-                            <span className="burn-countdown">· 🔥 {burnCountdown(m.expires_at, now)}</span>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={bottomRef} />
-            </div>
-
-            {showStickers && (
-              <div className="sticker-picker">
-                {STICKERS.map((s) => (
-                  <span key={s} onClick={() => handleStickerPick(s)}>
-                    {s}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <div className="message-input">
-              <button onClick={() => setShowStickers((s) => !s)} title="Stickers">
-                😀
-              </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                style={{ display: "none" }}
-                onChange={handleFileUpload}
-              />
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploading} title="Attach file">
-                📎
-              </button>
-              <input
-                type="text"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Type a message..."
-              />
-              <button onClick={handleSend} disabled={!draft.trim()}>
-                Send
-              </button>
-            </div>
-          </>
-        )}
-      </main>
-    </div>
-  );
-}
+                const isLockedCapsule =
+                  !isMine && m.unlock_at && new Date(m.unlock_at) > now;
+                let fusePct = nul
