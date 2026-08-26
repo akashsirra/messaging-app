@@ -58,22 +58,25 @@ export function setupChatSocket(io) {
       presenceState.set(userId, { focused: !!focused, openWith: openWith ?? null });
     });
 
-    socket.on("message:send", async ({ receiverId, type, content, burnAfter }) => {
+    socket.on("message:send", async ({ receiverId, type, content, burnAfter, unlockAt }) => {
       const expiresAt =
         typeof burnAfter === "number" && burnAfter > 0
           ? new Date(Date.now() + burnAfter).toISOString()
           : null;
 
+      const unlockAtValue =
+        typeof unlockAt === "string" && !isNaN(Date.parse(unlockAt))
+          ? unlockAt
+          : null;
+
       const insertResult = await db.query(
-        `INSERT INTO messages (sender_id, receiver_id, type, content, expires_at)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO messages (sender_id, receiver_id, type, content, expires_at, unlock_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [userId, receiverId, type || "text", content, expiresAt]
+        [userId, receiverId, type || "text", content, expiresAt, unlockAtValue]
       );
       const message = insertResult.rows[0];
 
-      // Auto-add the sender to the receiver's contacts so a message from
-      // someone new doesn't just vanish from their sidebar.
       const existingContact = await db.query(
         "SELECT 1 FROM contacts WHERE owner_id = $1 AND contact_id = $2",
         [receiverId, userId]
@@ -87,8 +90,19 @@ export function setupChatSocket(io) {
       }
 
       const receiverSocketId = onlineUsers.get(receiverId);
+      const isLocked = unlockAtValue && new Date(unlockAtValue) > new Date();
+
       if (receiverSocketId) {
-        io.to(receiverSocketId).emit("message:new", message);
+        if (!isLocked) {
+          io.to(receiverSocketId).emit("message:new", message);
+        } else {
+          io.to(receiverSocketId).emit("capsule:incoming", {
+            id: message.id,
+            senderId: userId,
+            unlockAt: unlockAtValue,
+          });
+        }
+
         if (!receiverAlreadyHasSender) {
           const senderResult = await db.query(
             "SELECT username FROM users WHERE id = $1",
@@ -100,6 +114,7 @@ export function setupChatSocket(io) {
           });
         }
       }
+
       socket.emit("message:new", message);
 
       const receiverPresence = presenceState.get(receiverId);
@@ -116,7 +131,11 @@ export function setupChatSocket(io) {
         const sender = senderResult.rows[0];
         sendPushToUser(receiverId, {
           title: sender?.username || "New message",
-          body: type === "text" ? content : "Sent you something",
+          body: isLocked
+            ? "Sent you a Time Capsule 🔒"
+            : type === "text"
+            ? content
+            : "Sent you something",
           senderId: userId,
           senderName: sender?.username,
         }).catch((err) => console.error("Push error:", err));
@@ -214,6 +233,22 @@ export function setupChatSocket(io) {
     for (const [uid, ids] of byUserPair) {
       const socketId = onlineUsers.get(uid);
       if (socketId) io.to(socketId).emit("message:deleted", { ids });
+    }
+  }, 15000);
+
+  setInterval(async () => {
+    const unlockedResult = await db.query(
+      `SELECT * FROM messages
+       WHERE unlock_at IS NOT NULL AND unlock_at <= now()`
+    );
+    const unlocked = unlockedResult.rows;
+    if (unlocked.length === 0) return;
+
+    for (const message of unlocked) {
+      const receiverSocketId = onlineUsers.get(message.receiver_id);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("capsule:unlocked", message);
+      }
     }
   }, 15000);
 }
