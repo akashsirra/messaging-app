@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { connectSocket, getSocket } from "../socket.js";
 import { setupPushNotifications } from "../push.js";
-import CallWindow from "../components/CallWindow";
+import CallWindow from "../CallWindow";
 import "./Chat.css";
 
 const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
