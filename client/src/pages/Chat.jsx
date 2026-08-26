@@ -95,6 +95,9 @@ export default function Chat() {
   const [burnMode, setBurnMode] = useState(false);
   const [expiringIds, setExpiringIds] = useState([]);
   const [now, setNow] = useState(Date.now());
+  const [newContactName, setNewContactName] = useState("");
+  const [addContactError, setAddContactError] = useState("");
+  const [addingContact, setAddingContact] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
@@ -175,6 +178,20 @@ export default function Chat() {
       }, 480);
     });
 
+    // Someone messaged us who wasn't in our contacts yet — the server
+    // auto-added them so they show up here instead of vanishing.
+    socket.on("contact:added", (contact) => {
+      setUsers((prev) => (prev.some((u) => u.id === contact.id) ? prev : [...prev, contact]));
+    });
+
+    // Either side deleted the chat — clear it live if it's currently open.
+    socket.on("chat:deleted", ({ byUserId }) => {
+      const openUser = activeUserRef.current;
+      if (openUser && openUser.id === byUserId) {
+        setMessages([]);
+      }
+    });
+
     setupPushNotifications();
 
     return () => {
@@ -182,15 +199,17 @@ export default function Chat() {
       socket.off("message:new");
       socket.off("message:seen");
       socket.off("message:deleted");
+      socket.off("contact:added");
+      socket.off("chat:deleted");
       socket.disconnect();
     };
   }, []);
 
   useEffect(() => {
     api
-      .getUsers()
+      .getContacts()
       .then(setUsers)
-      .catch((err) => console.error("Failed to load users", err))
+      .catch((err) => console.error("Failed to load contacts", err))
       .finally(() => setLoadingUsers(false));
   }, []);
 
@@ -263,6 +282,46 @@ export default function Chat() {
     navigate("/login");
   };
 
+  const handleAddContact = async (e) => {
+    e.preventDefault();
+    if (!newContactName.trim()) return;
+    setAddingContact(true);
+    setAddContactError("");
+    try {
+      const contact = await api.addContact(newContactName.trim());
+      setUsers((prev) => [...prev, contact]);
+      setNewContactName("");
+    } catch (err) {
+      setAddContactError(err.message || "Couldn't add that person.");
+    } finally {
+      setAddingContact(false);
+    }
+  };
+
+  const handleDeleteContact = async (e, contact) => {
+    e.stopPropagation(); // don't also trigger opening the chat
+    if (!window.confirm(`Remove ${contact.username} from your contacts?`)) return;
+    try {
+      await api.deleteContact(contact.id);
+      setUsers((prev) => prev.filter((u) => u.id !== contact.id));
+      if (activeUser?.id === contact.id) {
+        setActiveUser(null);
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error("Failed to delete contact", err);
+    }
+  };
+
+  const handleDeleteChat = () => {
+    if (!activeUser) return;
+    if (!window.confirm(`Delete this entire chat with ${activeUser.username}? This can't be undone.`)) {
+      return;
+    }
+    getSocket()?.emit("chat:delete", { otherUserId: activeUser.id });
+    setMessages([]);
+  };
+
   const items = [];
   messages.forEach((m, i) => {
     const prev = messages[i - 1];
@@ -283,6 +342,19 @@ export default function Chat() {
             Logout
           </button>
         </div>
+
+        <form className="add-contact-form" onSubmit={handleAddContact}>
+          <input
+            type="text"
+            value={newContactName}
+            onChange={(e) => setNewContactName(e.target.value)}
+            placeholder="Add by username..."
+          />
+          <button type="submit" disabled={addingContact || !newContactName.trim()}>
+            {addingContact ? "…" : "Add"}
+          </button>
+        </form>
+        {addContactError && <div className="add-contact-error">{addContactError}</div>}
 
         {loadingUsers &&
           [1, 2, 3].map((i) => (
@@ -312,11 +384,18 @@ export default function Chat() {
                 className={`status-dot ${onlineIds.includes(u.id) ? "online" : ""}`}
                 style={{ marginLeft: "auto" }}
               />
+              <button
+                className="remove-contact-btn"
+                onClick={(e) => handleDeleteContact(e, u)}
+                title={`Remove ${u.username}`}
+              >
+                ×
+              </button>
             </div>
           ))}
         {!loadingUsers && users.length === 0 && (
           <div className="user-item-status" style={{ padding: "8px 20px" }}>
-            No other users yet.
+            No contacts yet — add someone by username above.
           </div>
         )}
       </aside>
@@ -347,6 +426,13 @@ export default function Chat() {
                 title={burnMode ? "Auto-delete on (24h) — click to turn off" : "Turn on 24h auto-delete"}
               >
                 🔥
+              </button>
+              <button
+                className="delete-chat-btn"
+                onClick={handleDeleteChat}
+                title="Delete this chat for both of you"
+              >
+                🗑️
               </button>
               <CallWindow
                 currentUserId={me.id}
