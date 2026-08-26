@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { connectSocket, getSocket } from "../socket.js";
 import { setupPushNotifications } from "../push.js";
 import CallWindow from "../components/CallWindow";
+import "./Chat.css";
 
 const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
 
