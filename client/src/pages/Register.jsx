@@ -6,11 +6,13 @@ export default function Register() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    setLoading(true);
     try {
       const data = await api.register(username, password);
       localStorage.setItem("token", data.token);
@@ -18,13 +20,14 @@ export default function Register() {
       navigate("/");
     } catch (err) {
       setError(err.message);
+      setLoading(false);
     }
   }
 
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1 className="wordmark">whisper</h1>
+        <h1 className="wordmark">Whisper</h1>
         <p className="tagline">Create your account.</p>
 
         <label>Username</label>
@@ -41,7 +44,9 @@ export default function Register() {
 
         {error && <p className="error">{error}</p>}
 
-        <button type="submit">Create account</button>
+        <button type="submit" disabled={loading}>
+          {loading ? "Creating account..." : "Create account"}
+        </button>
         <p className="switch">
           Already have one? <Link to="/login">Log in</Link>
         </p>
