@@ -27,8 +27,8 @@ export default function Register() {
   return (
     <div className="auth-screen">
       <form className="auth-card" onSubmit={handleSubmit}>
-        <h1 className="wordmark">Themartiane</h1>
-        <p className="tagline">Create your account.</p>
+        <h1 className="wordmark">Martiane</h1>
+        <p className="tagline">Say it. Then let it go.</p>
 
         <label>Username</label>
         <input value={username} onChange={(e) => setUsername(e.target.value)} required />
