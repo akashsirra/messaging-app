@@ -7,7 +7,7 @@ const router = Router();
 // List everyone the current user has added as a contact.
 router.get("/", requireAuth, async (req, res) => {
   const result = await db.query(
-    `SELECT u.id, u.username
+    `SELECT u.id, u.username, u.last_active
      FROM contacts c
      JOIN users u ON u.id = c.contact_id
      WHERE c.owner_id = $1`,

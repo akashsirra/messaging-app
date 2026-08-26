@@ -72,6 +72,27 @@ function capsuleCountdown(unlockAt, now) {
   return `unlocks in ${d}d`;
 }
 
+// Presence trail: turns a raw last_active timestamp into a friendly,
+// low-pressure label instead of a stark online/offline dot.
+function activityLabel(isOnline, lastActive, now) {
+  if (isOnline) return "online";
+  if (!lastActive) return "no activity yet";
+  const msAgo = now - new Date(lastActive).getTime();
+  if (msAgo < 0) return "active just now";
+  const s = Math.floor(msAgo / 1000);
+  if (s < 60) return "active just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `active ${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `active ${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return "active yesterday";
+  if (d < 7) return `active ${d}d ago`;
+  const w = Math.floor(d / 7);
+  if (w === 1) return "active last week";
+  return "active a while ago";
+}
+
 function renderMessageContent(message) {
   if (message.type !== "image" && message.type !== "file") {
     return message.content;
@@ -419,34 +440,37 @@ export default function Chat() {
           ))}
 
         {!loadingUsers &&
-          users.map((u) => (
-            <div
-              key={u.id}
-              className={`user-item ${activeUser?.id === u.id ? "active" : ""}`}
-              onClick={() => setActiveUser(u)}
-            >
-              <div className="avatar" style={{ background: avatarColor(u.username) }}>
-                {initial(u.username)}
-              </div>
-              <div className="user-item-info">
-                <span className="user-item-name">{u.username}</span>
-                <span className="user-item-status">
-                  {onlineIds.includes(u.id) ? "online" : "offline"}
-                </span>
-              </div>
-              <span
-                className={`status-dot ${onlineIds.includes(u.id) ? "online" : ""}`}
-                style={{ marginLeft: "auto" }}
-              />
-              <button
-                className="remove-contact-btn"
-                onClick={(e) => handleDeleteContact(e, u)}
-                title={`Remove ${u.username}`}
+          users.map((u) => {
+            const isOnline = onlineIds.includes(u.id);
+            return (
+              <div
+                key={u.id}
+                className={`user-item ${activeUser?.id === u.id ? "active" : ""}`}
+                onClick={() => setActiveUser(u)}
               >
-                ×
-              </button>
-            </div>
-          ))}
+                <div className="avatar" style={{ background: avatarColor(u.username) }}>
+                  {initial(u.username)}
+                </div>
+                <div className="user-item-info">
+                  <span className="user-item-name">{u.username}</span>
+                  <span className="user-item-status">
+                    {activityLabel(isOnline, u.last_active, now)}
+                  </span>
+                </div>
+                <span
+                  className={`status-dot ${isOnline ? "online" : ""}`}
+                  style={{ marginLeft: "auto" }}
+                />
+                <button
+                  className="remove-contact-btn"
+                  onClick={(e) => handleDeleteContact(e, u)}
+                  title={`Remove ${u.username}`}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
         {!loadingUsers && users.length === 0 && (
           <div className="user-item-status" style={{ padding: "8px 20px" }}>
             No contacts yet — add someone by username above.
@@ -470,7 +494,7 @@ export default function Chat() {
                 <div>
                   <span className="chat-header-name">{activeUser.username}</span>
                   <span className="chat-header-status">
-                    {onlineIds.includes(activeUser.id) ? "online" : "offline"}
+                    {activityLabel(onlineIds.includes(activeUser.id), activeUser.last_active, now)}
                   </span>
                 </div>
               </div>

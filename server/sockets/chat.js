@@ -54,8 +54,19 @@ export function setupChatSocket(io) {
     presenceState.set(userId, { focused: true, openWith: null });
     io.emit("presence:update", Array.from(onlineUsers.keys()));
 
+    // Stamp last_active the moment someone connects, so even a brief
+    // visit updates their activity trail.
+    db.query("UPDATE users SET last_active = now() WHERE id = $1", [userId]).catch(
+      (err) => console.error("Failed to update last_active on connect:", err.message)
+    );
+
     socket.on("presence:focus", ({ focused, openWith }) => {
       presenceState.set(userId, { focused: !!focused, openWith: openWith ?? null });
+      if (focused) {
+        db.query("UPDATE users SET last_active = now() WHERE id = $1", [userId]).catch(
+          (err) => console.error("Failed to update last_active on focus:", err.message)
+        );
+      }
     });
 
     socket.on("message:send", async ({ receiverId, type, content, burnAfter, unlockAt }) => {
@@ -76,6 +87,10 @@ export function setupChatSocket(io) {
         [userId, receiverId, type || "text", content, expiresAt, unlockAtValue]
       );
       const message = insertResult.rows[0];
+
+      db.query("UPDATE users SET last_active = now() WHERE id = $1", [userId]).catch(
+        (err) => console.error("Failed to update last_active on send:", err.message)
+      );
 
       const existingContact = await db.query(
         "SELECT 1 FROM contacts WHERE owner_id = $1 AND contact_id = $2",
@@ -209,6 +224,9 @@ export function setupChatSocket(io) {
         onlineUsers.delete(userId);
         presenceState.delete(userId);
         io.emit("presence:update", Array.from(onlineUsers.keys()));
+        db.query("UPDATE users SET last_active = now() WHERE id = $1", [userId]).catch(
+          (err) => console.error("Failed to update last_active on disconnect:", err.message)
+        );
       }
     });
   });

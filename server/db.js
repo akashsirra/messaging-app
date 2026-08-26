@@ -14,8 +14,14 @@ async function init() {
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL
+      password_hash TEXT NOT NULL,
+      last_active TIMESTAMPTZ
     );
+  `);
+
+  // In case the table already existed from before this column was added.
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;
   `);
 
   await pool.query(`
@@ -32,7 +38,6 @@ async function init() {
     );
   `);
 
-  // In case the table already existed from before this column was added.
   await pool.query(`
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS unlock_at TIMESTAMPTZ;
   `);
