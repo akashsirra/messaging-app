@@ -3,15 +3,7 @@ import db from "../db.js";
 import { JWT_SECRET } from "../middleware/auth.js";
 import webpush from "../push.js";
 
-// Tracks which socket belongs to which user, so we know where to deliver messages.
-// { userId: socketId }
 const onlineUsers = new Map();
-
-// Tracks whether each online user currently has the app tab focused/visible,
-// and which conversation (if any) they have open. Used to decide whether a
-// new message needs a push notification, the same way WhatsApp/etc only
-// notify you for chats you're not actively looking at.
-// { userId: { focused: boolean, openWith: userId|null } }
 const presenceState = new Map();
 
 async function sendPushToUser(userId, payload) {
@@ -30,7 +22,6 @@ async function sendPushToUser(userId, payload) {
           body
         );
       } catch (err) {
-        // 404/410 means the subscription is dead (browser cleared it, etc.) — clean it up.
         if (err.statusCode === 404 || err.statusCode === 410) {
           db.data.pushSubscriptions = db.data.pushSubscriptions.filter(
             (s) => s.endpoint !== sub.endpoint
@@ -47,7 +38,6 @@ async function sendPushToUser(userId, payload) {
 }
 
 export function setupChatSocket(io) {
-  // Verify the JWT before allowing a socket connection
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error("No token"));
@@ -65,13 +55,10 @@ export function setupChatSocket(io) {
     presenceState.set(userId, { focused: true, openWith: null });
     io.emit("presence:update", Array.from(onlineUsers.keys()));
 
-    // Client reports tab focus + which conversation is open, so we know
-    // whether a new message needs a push or they're already looking at it.
     socket.on("presence:focus", ({ focused, openWith }) => {
       presenceState.set(userId, { focused: !!focused, openWith: openWith ?? null });
     });
 
-    // --- Text / media / sticker messages ---
     socket.on("message:send", async ({ receiverId, type, content }) => {
       await db.read();
       const id = db.data.messages.length
@@ -90,18 +77,12 @@ export function setupChatSocket(io) {
       db.data.messages.push(message);
       await db.write();
 
-      // Send to the receiver if they're online
       const receiverSocketId = onlineUsers.get(receiverId);
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("message:new", message);
       }
-      // Echo back to sender so their own UI updates
       socket.emit("message:new", message);
 
-      // Decide whether the receiver needs a push notification: skip it only
-      // if they're online, tab-focused, AND already looking at this exact
-      // conversation — otherwise (offline, backgrounded, or on a different
-      // chat) they wouldn't see the message land, so we notify.
       const receiverPresence = presenceState.get(receiverId);
       const alreadySeeing =
         receiverSocketId &&
@@ -126,7 +107,6 @@ export function setupChatSocket(io) {
       }
     });
 
-    // --- WebRTC call signaling (used in Phase 4) ---
     socket.on("call:offer", ({ receiverId, offer }) => {
       const receiverSocketId = onlineUsers.get(receiverId);
       if (receiverSocketId) {
@@ -156,11 +136,6 @@ export function setupChatSocket(io) {
     });
 
     socket.on("disconnect", () => {
-      // Only clear this user's "online" state if the disconnecting socket is
-      // still the one on record. If they reconnected (e.g. new tab, flaky
-      // network) before this old socket's disconnect event fired, onlineUsers
-      // already points at the newer socket — deleting here would wrongly
-      // mark a still-connected user as offline.
       if (onlineUsers.get(userId) === socket.id) {
         onlineUsers.delete(userId);
         presenceState.delete(userId);
