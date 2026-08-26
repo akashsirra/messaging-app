@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { connectSocket, getSocket } from "../socket.js";
 import { setupPushNotifications } from "../push.js";
-import CallWindow from "../CallWindow";
+import CallWindow from "../components/CallWindow";
 
 const STICKERS = ["😀", "😂", "😍", "😎", "🥳", "😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
 
@@ -204,7 +204,14 @@ export default function Chat() {
           <div className="empty-state">Select a chat to start messaging</div>
         ) : (
           <>
-            <header className="chat-header">{activeUser.username}</header>
+            <header className="chat-header">
+              <span>{activeUser.username}</span>
+              <CallWindow
+                currentUserId={me.id}
+                targetUserId={activeUser.id}
+                targetName={activeUser.username}
+              />
+            </header>
 
             <div className="message-list">
               {messages.map((m, i) => (
