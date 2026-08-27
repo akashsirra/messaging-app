@@ -37,14 +37,14 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
       localVideoRef.current.srcObject = localStream;
         localVideoRef.current.play().then(() => setDebugInfo((d) => d + " | localOK")).catch((err) => setDebugInfo((d) => d + " | localERR:" + err.name));
     }
-  }, [localStream]);
+  }, [localStream, callStatus]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.play().then(() => setDebugInfo((d) => d + " | remoteOK")).catch((err) => setDebugInfo((d) => d + " | remoteERR:" + err.name));
     }
-  }, [remoteStream]);
+  }, [remoteStream, callStatus]);
 
   if (callStatus === "idle") {
     return (
