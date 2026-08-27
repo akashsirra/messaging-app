@@ -96,7 +96,7 @@ function activityLabel(isOnline, lastActive, now) {
 }
 
 function renderMessageContent(message) {
-  if (message.type !== "image" && message.type !== "file") {
+  if (message.type !== "image" && message.type !== "file" && message.type !== "audio") {
     return message.content;
   }
   let url, filename;
