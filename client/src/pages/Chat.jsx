@@ -665,12 +665,6 @@ export default function Chat() {
               </div>
             )}
 
-              {replyTarget && (
-                <div className="reply-preview-bar">
-                  <span>Replying with voice to: {(replyTarget.content || "").toString().slice(0, 40)}</span>
-                  <button type="button" onClick={() => setReplyTarget(null)} title="Cancel reply">✕</button>
-                </div>
-              )}
             <div className="message-input">
               <button onClick={() => setShowStickers((s) => !s)} title="Stickers">
                 😀
@@ -682,11 +676,11 @@ export default function Chat() {
                 onChange={handleFileUpload}
               />
               <button onClick={() => fileInputRef.current?.click()} disabled={uploading} title="Attach file">
+                📎
+              </button>
               {replyTarget && (
                 <VoiceRecorder onRecorded={handleVoiceReply} onCancel={() => setReplyTarget(null)} />
               )}
-                📎
-              </button>
               <input
                 type="text"
                 value={draft}
