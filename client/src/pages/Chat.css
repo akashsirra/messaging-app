@@ -637,3 +637,10 @@
 .voice-stop-btn:hover {
   background: var(--accent-soft);
 }
+
+/* Prevent native text selection from interfering with long-press-to-reply */
+.message {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
