@@ -531,3 +531,109 @@
     max-width: 80%;
   }
 }
+/* --- Echo replies: reply banner + voice recorder --- */
+
+.reply-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.reply-preview-bar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-preview-bar button {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+.reply-preview-bar button:hover {
+  color: var(--text);
+}
+
+.voice-record-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 50%;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-record-btn:hover {
+  background: var(--accent-soft);
+}
+
+.voice-recording-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  flex: 1;
+}
+
+.voice-recording-dot {
+  color: #e5484d;
+  animation: voice-pulse 1s infinite ease-in-out;
+  font-size: 12px;
+}
+
+@keyframes voice-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.voice-recording-time {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex: 1;
+}
+
+.voice-cancel-btn,
+.voice-stop-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 8px;
+  border-radius: 50%;
+}
+
+.voice-cancel-btn {
+  color: var(--text-faint);
+}
+
+.voice-cancel-btn:hover {
+  color: #e5484d;
+}
+
+.voice-stop-btn {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.voice-stop-btn:hover {
+  background: var(--accent-soft);
+}
