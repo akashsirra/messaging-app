@@ -34,12 +34,14 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
+        localVideoRef.current.play().catch((err) => console.error("Local play() failed:", err));
     }
   }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.play().catch((err) => console.error("Remote play() failed:", err));
     }
   }, [remoteStream]);
 
