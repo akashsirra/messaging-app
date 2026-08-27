@@ -43,7 +43,7 @@ function scoreMessage(text) {
 export function getMoodScore(messages, count = 8) {
   if (!messages || messages.length === 0) return 0;
   const recent = messages.slice(-count);
-  const total = recent.reduce((sum, m) => sum + scoreMessage(m.text || m.content || ""), 0);
+  const total = recent.reduce((sum, m) => sum + scoreMessage((m.type && m.type !== "text") ? "" : (m.content || "")), 0);
   return total / recent.length;
 }
 
