@@ -170,12 +170,24 @@ export function setupChatSocket(io) {
       }
     });
 
-    socket.on("call:offer", ({ receiverId, offer }) => {
-      const receiverSocketId = onlineUsers.get(receiverId);
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("call:offer", { from: userId, offer });
-      }
-    });
+  socket.on("call:offer", async ({ receiverId, offer }) => {
+    const receiverSocketId = onlineUsers.get(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("call:offer", { from: userId, offer });
+    }
+    const callerResult = await db.query(
+      "SELECT username FROM users WHERE id = $1",
+      [userId]
+    );
+    const caller = callerResult.rows[0];
+    sendPushToUser(receiverId, {
+      type: "call",
+      title: caller?.username || "Incoming call",
+      body: "is calling you 📞",
+      senderId: userId,
+      senderName: caller?.username,
+    }).catch((err) => console.error("Call push error:", err));
+  });
 
     socket.on("call:answer", ({ receiverId, answer }) => {
       const receiverSocketId = onlineUsers.get(receiverId);
