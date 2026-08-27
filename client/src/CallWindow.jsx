@@ -22,6 +22,7 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
     remoteStream,
     videoOn,
     remoteVideoOn,
+    iceState,
     startCall,
     answerCall,
     endCall,
@@ -74,7 +75,7 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
 
       {callStatus === "in-call" && (
         <div className="call-video-stage">
-        <div style={{position:"absolute",top:0,left:0,background:"black",color:"lime",fontSize:"10px",zIndex:999,padding:"4px"}}>local:{localStream ? localStream.getTracks().length : "none"} remote:{remoteStream ? remoteStream.getTracks().length : "none"} | lp:{localVideoRef.current?.paused ? "paused" : "playing"} rp:{remoteVideoRef.current?.paused ? "paused" : "playing"} lrs:{localVideoRef.current?.readyState} rrs:{remoteVideoRef.current?.readyState} | {debugInfo}</div>
+        <div style={{position:"absolute",top:0,left:0,background:"black",color:"lime",fontSize:"10px",zIndex:999,padding:"4px"}}>local:{localStream ? localStream.getTracks().length : "none"} remote:{remoteStream ? remoteStream.getTracks().length : "none"} | lp:{localVideoRef.current?.paused ? "paused" : "playing"} rp:{remoteVideoRef.current?.paused ? "paused" : "playing"} lrs:{localVideoRef.current?.readyState} rrs:{remoteVideoRef.current?.readyState} | {debugInfo} | ICE:{iceState}</div>
           <video ref={remoteVideoRef} autoPlay playsInline className="call-video-remote" />
           {!remoteVideoOn && (
             <div className="call-video-off-placeholder">

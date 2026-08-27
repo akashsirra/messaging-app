@@ -31,6 +31,7 @@ export function useCall(currentUserId) {
   const [remoteUserId, setRemoteUserId] = useState(null);
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
+  const [iceState, setIceState] = useState("new");
   const [videoOn, setVideoOn] = useState(true);
   const [remoteVideoOn, setRemoteVideoOn] = useState(true);
 
@@ -45,6 +46,10 @@ export function useCall(currentUserId) {
 
   const createPeerConnection = useCallback((targetUserId) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE state:", pc.iceConnectionState);
+      setIceState(pc.iceConnectionState);
+    };
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -244,6 +249,7 @@ export function useCall(currentUserId) {
     remoteStream,
     videoOn,
     remoteVideoOn,
+    iceState,
     startCall,
     answerCall,
     endCall,
