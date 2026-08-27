@@ -73,6 +73,7 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
 
       {callStatus === "in-call" && (
         <div className="call-video-stage">
+        <div style={{position:"absolute",top:0,left:0,background:"black",color:"lime",fontSize:"10px",zIndex:999,padding:"4px"}}>local:{localStream ? localStream.getTracks().length : "none"} remote:{remoteStream ? remoteStream.getTracks().length : "none"}</div>
           <video ref={remoteVideoRef} autoPlay playsInline className="call-video-remote" />
           {!remoteVideoOn && (
             <div className="call-video-off-placeholder">
