@@ -69,7 +69,7 @@ export function setupChatSocket(io) {
       }
     });
 
-    socket.on("message:send", async ({ receiverId, type, content, burnAfter, unlockAt }) => {
+    socket.on("message:send", async ({ receiverId, type, content, burnAfter, unlockAt, replyTo }) => {
       const expiresAt =
         typeof burnAfter === "number" && burnAfter > 0
           ? new Date(Date.now() + burnAfter).toISOString()
@@ -81,10 +81,10 @@ export function setupChatSocket(io) {
           : null;
 
       const insertResult = await db.query(
-        `INSERT INTO messages (sender_id, receiver_id, type, content, expires_at, unlock_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO messages (sender_id, receiver_id, type, content, expires_at, unlock_at, reply_to)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [userId, receiverId, type || "text", content, expiresAt, unlockAtValue]
+        [userId, receiverId, type || "text", content, expiresAt, unlockAtValue, replyTo || null]
       );
       const message = insertResult.rows[0];
 

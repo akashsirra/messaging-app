@@ -5,6 +5,7 @@ import { connectSocket, getSocket } from "../socket.js";
 import { setupPushNotifications } from "../push.js";
 import CallWindow from "../CallWindow";
 import { getMoodScore, moodToColors } from "../utils/mood";
+import VoiceRecorder from "../VoiceRecorder";
 import "./Chat.css";
 
 const STICKERS = ["😀", "😂", "😍", "😎", "🥳", " 😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
@@ -105,6 +106,9 @@ function renderMessageContent(message) {
     return "[Attachment unavailable]";
   }
   const fullUrl = toAbsoluteUrl(url);
+  if (message.type === "audio") {
+    return <audio controls src={fullUrl} style={{ maxWidth: "220px" }} />;
+  }
   if (message.type === "image") {
     return (
       <a href={fullUrl} target="_blank" rel="noreferrer">
@@ -129,6 +133,8 @@ export default function Chat() {
   const [activeUser, setActiveUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const moodColors = useMemo(() => moodToColors(getMoodScore(messages)), [messages]);
+  const [replyTarget, setReplyTarget] = useState(null);
+  const longPressTimer = useRef(null);
   const [draft, setDraft] = useState("");
   const [showStickers, setShowStickers] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -345,6 +351,24 @@ export default function Chat() {
     } finally {
       setUploading(false);
       e.target.value = "";
+    }
+  };
+
+  const handleVoiceReply = async (file) => {
+    if (!activeUser || !replyTarget) return;
+    try {
+      const { url } = await api.uploadFile(file);
+      const socket = getSocket();
+      socket.emit("message:send", {
+        receiverId: activeUser.id,
+        type: "audio",
+        content: JSON.stringify({ url, filename: file.name }),
+        replyTo: replyTarget.id,
+      });
+    } catch (err) {
+      console.error("Voice reply upload failed", err);
+    } finally {
+      setReplyTarget(null);
     }
   };
 
@@ -598,7 +622,7 @@ export default function Chat() {
                       </div>
                     )}
                     <div className="message-col">
-                      <div className={`message ${isMine ? "sent" : "received"} ${isBurning ? "burning" : ""}`}>
+                      <div className={`message ${isMine ? "sent" : "received"} ${isBurning ? "burning" : ""}`} onTouchStart={() => { longPressTimer.current = setTimeout(() => setReplyTarget(m), 500); }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onMouseDown={() => { longPressTimer.current = setTimeout(() => setReplyTarget(m), 500); }} onMouseUp={() => clearTimeout(longPressTimer.current)} onContextMenu={(e) => e.preventDefault()}>
                         {isLockedCapsule ? (
                           <span style={{ opacity: 0.75 }}>
                             🔒 Time Capsule — {capsuleCountdown(m.unlock_at, now)}
@@ -641,6 +665,12 @@ export default function Chat() {
               </div>
             )}
 
+              {replyTarget && (
+                <div className="reply-preview-bar">
+                  <span>Replying with voice to: {(replyTarget.content || "").toString().slice(0, 40)}</span>
+                  <button type="button" onClick={() => setReplyTarget(null)} title="Cancel reply">✕</button>
+                </div>
+              )}
             <div className="message-input">
               <button onClick={() => setShowStickers((s) => !s)} title="Stickers">
                 😀
@@ -652,6 +682,9 @@ export default function Chat() {
                 onChange={handleFileUpload}
               />
               <button onClick={() => fileInputRef.current?.click()} disabled={uploading} title="Attach file">
+              {replyTarget && (
+                <VoiceRecorder onRecorded={handleVoiceReply} onCancel={() => setReplyTarget(null)} />
+              )}
                 📎
               </button>
               <input
