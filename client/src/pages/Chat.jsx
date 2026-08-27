@@ -287,6 +287,18 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
+    if (loadingUsers || users.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get("user");
+    if (!userId) return;
+    const match = users.find((u) => String(u.id) === String(userId));
+    if (match) {
+      setActiveUser(match);
+      window.history.replaceState({}, "", "/");
+    }
+  }, [loadingUsers, users]);
+
+  useEffect(() => {
     if (!activeUser) return;
     api
       .getHistory(activeUser.id)
