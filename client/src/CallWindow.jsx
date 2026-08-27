@@ -1,5 +1,5 @@
 // client/src/CallWindow.jsx
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCall } from "./useCall";
 import "./CallWindow.css";
 
@@ -30,18 +30,19 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const [debugInfo, setDebugInfo] = useState("");
 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
-        localVideoRef.current.play().catch((err) => console.error("Local play() failed:", err));
+        localVideoRef.current.play().then(() => setDebugInfo((d) => d + " | localOK")).catch((err) => setDebugInfo((d) => d + " | localERR:" + err.name));
     }
   }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.play().catch((err) => console.error("Remote play() failed:", err));
+        remoteVideoRef.current.play().then(() => setDebugInfo((d) => d + " | remoteOK")).catch((err) => setDebugInfo((d) => d + " | remoteERR:" + err.name));
     }
   }, [remoteStream]);
 
@@ -73,7 +74,7 @@ export default function CallWindow({ currentUserId, targetUserId, targetName }) 
 
       {callStatus === "in-call" && (
         <div className="call-video-stage">
-        <div style={{position:"absolute",top:0,left:0,background:"black",color:"lime",fontSize:"10px",zIndex:999,padding:"4px"}}>local:{localStream ? localStream.getTracks().length : "none"} remote:{remoteStream ? remoteStream.getTracks().length : "none"} | lp:{localVideoRef.current?.paused ? "paused" : "playing"} rp:{remoteVideoRef.current?.paused ? "paused" : "playing"} lrs:{localVideoRef.current?.readyState} rrs:{remoteVideoRef.current?.readyState}</div>
+        <div style={{position:"absolute",top:0,left:0,background:"black",color:"lime",fontSize:"10px",zIndex:999,padding:"4px"}}>local:{localStream ? localStream.getTracks().length : "none"} remote:{remoteStream ? remoteStream.getTracks().length : "none"} | lp:{localVideoRef.current?.paused ? "paused" : "playing"} rp:{remoteVideoRef.current?.paused ? "paused" : "playing"} lrs:{localVideoRef.current?.readyState} rrs:{remoteVideoRef.current?.readyState} | {debugInfo}</div>
           <video ref={remoteVideoRef} autoPlay playsInline className="call-video-remote" />
           {!remoteVideoOn && (
             <div className="call-video-off-placeholder">
