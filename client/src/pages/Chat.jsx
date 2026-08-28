@@ -402,6 +402,10 @@ export default function Chat() {
   const handleSend = () => {
     if (!draft.trim() || !activeUser) return;
     const socket = getSocket();
+    if (!socket || !socket.connected) {
+      alert("Not connected to server. Please wait a moment and try again.");
+      return;
+    }
     socket.emit("message:send", {
       receiverId: activeUser.id,
       type: "text",
@@ -523,12 +527,22 @@ export default function Chat() {
 
   const handleKiss = () => {
     if (!activeUser) return;
-    getSocket()?.emit("kiss:send", { receiverId: activeUser.id });
+    const socket = getSocket();
+    if (!socket || !socket.connected) {
+      alert("Not connected to server. Please wait a moment and try again.");
+      return;
+    }
+    socket.emit("kiss:send", { receiverId: activeUser.id });
   };
 
   const handleMissYou = () => {
     if (!activeUser) return;
-    getSocket()?.emit("missyou:send", { receiverId: activeUser.id });
+    const socket = getSocket();
+    if (!socket || !socket.connected) {
+      alert("Not connected to server. Please wait a moment and try again.");
+      return;
+    }
+    socket.emit("missyou:send", { receiverId: activeUser.id });
   };
 
   const handleDeleteChat = () => {
