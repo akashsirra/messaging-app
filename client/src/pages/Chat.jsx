@@ -177,6 +177,7 @@ export default function Chat() {
   const [capsuleDurationMs, setCapsuleDurationMs] = useState(null);
   const [showCapsuleMenu, setShowCapsuleMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [actionMenuFor, setActionMenuFor] = useState(null);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
@@ -227,6 +228,14 @@ export default function Chat() {
       if (activeUserRef.current && activeUserRef.current.id === from) {
         setOtherTyping(true);
       }
+    });
+
+    socket.on("message:edited", (msg) => {
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+    });
+
+    socket.on("message:unsent", ({ id }) => {
+      setMessages((prev) => prev.filter((m) => m.id !== id));
     });
 
     socket.on("kiss:received", () => {
@@ -327,6 +336,8 @@ export default function Chat() {
       socket.off("typing:stop");
       socket.off("missyou:received");
       socket.off("kiss:received");
+      socket.off("message:edited");
+      socket.off("message:unsent");
       socket.off("message:new");
       socket.off("capsule:incoming");
       socket.off("capsule:unlocked");
@@ -485,6 +496,22 @@ export default function Chat() {
     } catch (err) {
       console.error("Failed to delete contact", err);
     }
+  };
+
+  const handleEditMessage = (m) => {
+    const newContent = window.prompt("Edit message:", m.content);
+    if (newContent === null || !newContent.trim() || newContent === m.content) return;
+    getSocket()?.emit("message:edit", { messageId: m.id, newContent: newContent.trim() });
+  };
+
+  const handleUnsendMessage = (m) => {
+    if (!window.confirm("Unsend this message for both of you?")) return;
+    getSocket()?.emit("message:unsend", { messageId: m.id });
+  };
+
+  const handleDeleteForMe = (m) => {
+    if (!window.confirm("Delete this message just for you?")) return;
+    getSocket()?.emit("message:delete-for-me", { messageId: m.id });
   };
 
   const handleKiss = () => {
@@ -745,7 +772,7 @@ export default function Chat() {
                       </div>
                     )}
                     <div className="message-col">
-                      <div className={`message ${isMine ? "sent bubble-me" : "received bubble-them"} ${isBurning ? "burning" : ""}`} onTouchStart={() => { longPressTimer.current = setTimeout(() => setReplyTarget(m), 500); }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onMouseDown={() => { longPressTimer.current = setTimeout(() => setReplyTarget(m), 500); }} onMouseUp={() => clearTimeout(longPressTimer.current)} onContextMenu={(e) => e.preventDefault()}>
+                      <div className={`message ${isMine ? "sent bubble-me" : "received bubble-them"} ${isBurning ? "burning" : ""}`} onTouchStart={() => { longPressTimer.current = setTimeout(() => setActionMenuFor(m.id), 500); }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onMouseDown={() => { longPressTimer.current = setTimeout(() => setActionMenuFor(m.id), 500); }} onMouseUp={() => clearTimeout(longPressTimer.current)} onContextMenu={(e) => e.preventDefault()}>
                         {isLockedCapsule ? (
                           <span style={{ opacity: 0.75 }}>
                             🔒 Time Capsule — {capsuleCountdown(m.unlock_at, now)}
@@ -756,7 +783,31 @@ export default function Chat() {
                         {isBurning && fusePct !== null && (
                           <span className="burn-fuse" style={{ width: `${fusePct}%` }} />
                         )}
+                        {m.edited && <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
                       </div>
+                      {actionMenuFor === m.id && (
+                        <div className="sticker-picker" style={{ position: "static", marginTop: 4 }}>
+                          <div className="more-menu-item" onClick={() => { setReplyTarget(m); setActionMenuFor(null); }}>
+                            ↩️ Reply
+                          </div>
+                          {isMine && m.type === "text" && (
+                            <div className="more-menu-item" onClick={() => { handleEditMessage(m); setActionMenuFor(null); }}>
+                              ✏️ Edit
+                            </div>
+                          )}
+                          {isMine && (
+                            <div className="more-menu-item" onClick={() => { handleUnsendMessage(m); setActionMenuFor(null); }}>
+                              🗑️ Unsend for everyone
+                            </div>
+                          )}
+                          <div className="more-menu-item" onClick={() => { handleDeleteForMe(m); setActionMenuFor(null); }}>
+                            🙈 Delete for me
+                          </div>
+                          <div className="more-menu-item" onClick={() => setActionMenuFor(null)}>
+                            ✖ Cancel
+                          </div>
+                        </div>
+                      )}
                       {!item.grouped && (
                         <span className="message-meta">
                           <span>{formatTime(m.created_at)}</span>

@@ -17,7 +17,8 @@ router.get("/:otherUserId", requireAuth, async (req, res) => {
          OR unlock_at <= now()
          OR sender_id = $1
        )
-     ORDER BY created_at ASC`,
+     AND NOT (me = ANY(deleted_for))
+      ORDER BY created_at ASC`,
     [me, other]
   );
 

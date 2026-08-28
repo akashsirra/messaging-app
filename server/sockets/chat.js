@@ -157,6 +157,49 @@ export function setupChatSocket(io) {
       }
     });
 
+    socket.on("message:edit", async ({ messageId, newContent }) => {
+      const result = await db.query(
+        `UPDATE messages SET content = $1, edited = true
+         WHERE id = $2 AND sender_id = $3
+         RETURNING *`,
+        [newContent, messageId, userId]
+      );
+      const updated = result.rows[0];
+      if (!updated) return;
+
+      socket.emit("message:edited", updated);
+      const receiverSocketId = onlineUsers.get(updated.receiver_id);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("message:edited", updated);
+      }
+    });
+
+    socket.on("message:unsend", async ({ messageId }) => {
+      const result = await db.query(
+        `SELECT * FROM messages WHERE id = $1 AND sender_id = $2`,
+        [messageId, userId]
+      );
+      const message = result.rows[0];
+      if (!message) return;
+
+      await db.query("DELETE FROM messages WHERE id = $1", [messageId]);
+
+      socket.emit("message:unsent", { id: messageId });
+      const receiverSocketId = onlineUsers.get(message.receiver_id);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("message:unsent", { id: messageId });
+      }
+    });
+
+    socket.on("message:delete-for-me", async ({ messageId }) => {
+      await db.query(
+        `UPDATE messages SET deleted_for = array_append(deleted_for, $1)
+         WHERE id = $2 AND NOT ($1 = ANY(deleted_for))`,
+        [userId, messageId]
+      );
+      socket.emit("message:unsent", { id: messageId });
+    });
+
     socket.on("message:seen", async ({ otherUserId }) => {
       await db.query(
         `UPDATE messages SET seen = true
