@@ -24,6 +24,8 @@ const allowedOrigins = process.env.CLIENT_URL
 
 const io = new Server(httpServer, {
   cors: { origin: allowedOrigins },
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 app.use(cors({ origin: allowedOrigins }));
