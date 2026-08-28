@@ -152,6 +152,7 @@ export default function Chat() {
   const [addingContact, setAddingContact] = useState(false);
   const [capsuleDurationMs, setCapsuleDurationMs] = useState(null);
   const [showCapsuleMenu, setShowCapsuleMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
@@ -608,68 +609,61 @@ export default function Chat() {
                   </span>
                 </div>
               </div>
-              <button
-                className="burn-toggle"
-                onClick={handleKiss}
-                title="Send a kiss"
-              >
-                💋
-              </button>
-              <button
-                className="burn-toggle"
-                onClick={handleMissYou}
-                title="Send a Miss You ping"
-              >
-                🥺
-              </button>
-              <button
-                className={`burn-toggle ${burnMode ? "active" : ""}`}
-                onClick={() => setBurnMode((b) => !b)}
-                title={burnMode ? "Auto-delete on (24h) — click to turn off" : "Turn on 24h auto-delete"}
-              >
-                🔥
-              </button>
               <div style={{ position: "relative" }}>
                 <button
-                  className={`burn-toggle ${capsuleDurationMs ? "active" : ""}`}
-                  onClick={() => setShowCapsuleMenu((s) => !s)}
-                  title={capsuleLabel ? `Time Capsule: ${capsuleLabel} — click to change` : "Send as a Time Capsule"}
+                  className="burn-toggle"
+                  onClick={() => setShowMoreMenu((s) => !s)}
+                  title="More options"
                 >
-                  ⏳
+                  ⋯
                 </button>
-                {showCapsuleMenu && (
-                  <div className="sticker-picker" style={{ right: 0, left: "auto", minWidth: 140 }}>
-                    {CAPSULE_DURATIONS.map((d) => (
-                      <div
-                        key={d.label}
-                        style={{ padding: "6px 10px", cursor: "pointer", whiteSpace: "nowrap" }}
-                        onClick={() => {
-                          setCapsuleDurationMs(d.ms);
-                          setShowCapsuleMenu(false);
-                        }}
-                      >
-                        {d.label}
+                {showMoreMenu && (
+                  <div className="sticker-picker" style={{ right: 0, left: "auto", minWidth: 190 }}>
+                    <div className="more-menu-item" onClick={() => { handleKiss(); setShowMoreMenu(false); }}>
+                      💋 Send a kiss
+                    </div>
+                    <div className="more-menu-item" onClick={() => { handleMissYou(); setShowMoreMenu(false); }}>
+                      🥺 Miss you ping
+                    </div>
+                    <div className="more-menu-item" onClick={() => setBurnMode((b) => !b)}>
+                      🔥 {burnMode ? "Turn off auto-delete" : "Turn on auto-delete (24h)"}
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <div className="more-menu-item" onClick={() => setShowCapsuleMenu((s) => !s)}>
+                        ⏳ {capsuleLabel ? `Time Capsule: ${capsuleLabel}` : "Send as Time Capsule"}
                       </div>
-                    ))}
-                    <div
-                      style={{ padding: "6px 10px", cursor: "pointer", opacity: 0.7 }}
-                      onClick={() => {
-                        setCapsuleDurationMs(null);
-                        setShowCapsuleMenu(false);
-                      }}
-                    >
-                      Off
+                      {showCapsuleMenu && (
+                        <div className="sticker-picker" style={{ right: "100%", left: "auto", top: 0, minWidth: 140 }}>
+                          {CAPSULE_DURATIONS.map((d) => (
+                            <div
+                              key={d.label}
+                              style={{ padding: "6px 10px", cursor: "pointer", whiteSpace: "nowrap" }}
+                              onClick={() => {
+                                setCapsuleDurationMs(d.ms);
+                                setShowCapsuleMenu(false);
+                              }}
+                            >
+                              {d.label}
+                            </div>
+                          ))}
+                          <div
+                            style={{ padding: "6px 10px", cursor: "pointer", opacity: 0.7 }}
+                            onClick={() => {
+                              setCapsuleDurationMs(null);
+                              setShowCapsuleMenu(false);
+                            }}
+                          >
+                            Off
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="more-menu-item" onClick={() => { handleDeleteChat(); setShowMoreMenu(false); }}>
+                      🗑️ Delete chat
                     </div>
                   </div>
                 )}
               </div>
-              <button
-                className="delete-chat-btn"
-                onClick={handleDeleteChat}
-                title="Delete this chat for both of you"
-              >
-                🗑️
-              </button>
               <CallWindow
                 currentUserId={me.id}
                 targetUserId={activeUser.id}
