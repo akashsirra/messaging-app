@@ -231,6 +231,14 @@ export function setupChatSocket(io) {
       }
     });
 
+    socket.on("kiss:send", ({ receiverId }) => {
+      const receiverSocketId = onlineUsers.get(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("kiss:received", { from: userId });
+      }
+      socket.emit("kiss:received", { from: userId });
+    });
+
     socket.on("missyou:send", async ({ receiverId }) => {
       const senderResult = await db.query(
         "SELECT username FROM users WHERE id = $1",

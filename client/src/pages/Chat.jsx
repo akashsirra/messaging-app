@@ -146,6 +146,7 @@ export default function Chat() {
   const typingTimeoutRef = useRef(null);
   const [sendBurst, setSendBurst] = useState(0);
   const [missYouToast, setMissYouToast] = useState(null);
+  const [kissBurst, setKissBurst] = useState(0);
   const [newContactName, setNewContactName] = useState("");
   const [addContactError, setAddContactError] = useState("");
   const [addingContact, setAddingContact] = useState(false);
@@ -201,6 +202,10 @@ export default function Chat() {
       if (activeUserRef.current && activeUserRef.current.id === from) {
         setOtherTyping(true);
       }
+    });
+
+    socket.on("kiss:received", () => {
+      setKissBurst((b) => b + 1);
     });
 
     socket.on("missyou:received", ({ senderName }) => {
@@ -296,6 +301,7 @@ export default function Chat() {
       socket.off("typing:start");
       socket.off("typing:stop");
       socket.off("missyou:received");
+      socket.off("kiss:received");
       socket.off("message:new");
       socket.off("capsule:incoming");
       socket.off("capsule:unlocked");
@@ -456,6 +462,11 @@ export default function Chat() {
     }
   };
 
+  const handleKiss = () => {
+    if (!activeUser) return;
+    getSocket()?.emit("kiss:send", { receiverId: activeUser.id });
+  };
+
   const handleMissYou = () => {
     if (!activeUser) return;
     getSocket()?.emit("missyou:send", { receiverId: activeUser.id });
@@ -487,6 +498,24 @@ export default function Chat() {
 
   return (
     <div className={`chat-page ${activeUser ? "chat-open" : ""}`}>
+      {kissBurst > 0 && (
+        <div className="kiss-overlay" key={kissBurst}>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <span
+              key={i}
+              className="kiss-particle"
+              style={{
+                left: `${Math.random() * 90 + 5}%`,
+                animationDelay: `${Math.random() * 0.4}s`,
+                fontSize: `${20 + Math.random() * 20}px`,
+              }}
+            >
+              {Math.random() > 0.5 ? "💋" : "❤️"}
+            </span>
+          ))}
+        </div>
+      )}
+
       {missYouToast && (
         <div className="missyou-toast">{missYouToast} misses you 🥺❤️</div>
       )}
@@ -579,6 +608,13 @@ export default function Chat() {
                   </span>
                 </div>
               </div>
+              <button
+                className="burn-toggle"
+                onClick={handleKiss}
+                title="Send a kiss"
+              >
+                💋
+              </button>
               <button
                 className="burn-toggle"
                 onClick={handleMissYou}

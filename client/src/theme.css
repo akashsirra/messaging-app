@@ -146,3 +146,31 @@ body {
     opacity: 1;
   }
 }
+
+.kiss-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  overflow: hidden;
+}
+
+.kiss-particle {
+  position: absolute;
+  bottom: -40px;
+  animation: kiss-float 2.2s ease-in forwards;
+}
+
+@keyframes kiss-float {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100vh) rotate(20deg);
+    opacity: 0;
+  }
+}
