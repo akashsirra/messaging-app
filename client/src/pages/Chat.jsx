@@ -6,6 +6,7 @@ import { setupPushNotifications } from "../push.js";
 import CallWindow from "../CallWindow";
 import { getMoodScore, moodToColors } from "../utils/mood";
 import VoiceRecorder from "../VoiceRecorder";
+import DoodleCanvas from "../DoodleCanvas";
 import "./Chat.css";
 import ThemeToggle from "../ThemeToggle";
 
@@ -179,6 +180,8 @@ export default function Chat() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [actionMenuFor, setActionMenuFor] = useState(null);
   const wasLongPressRef = useRef(false);
+  const [showDoodle, setShowDoodle] = useState(false);
+  const [sendingDoodle, setSendingDoodle] = useState(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
@@ -422,6 +425,33 @@ export default function Chat() {
       unlockAt: computeUnlockAt(),
     });
     setShowStickers(false);
+  };
+
+  const handleDoodleSend = async (blob) => {
+    if (!activeUser) return;
+    setSendingDoodle(true);
+    try {
+      const file = new File([blob], `doodle-${Date.now()}.png`, { type: "image/png" });
+      const { url } = await api.uploadFile(file);
+      const socket = getSocket();
+      if (!socket || !socket.connected) {
+        alert("Not connected to server. Please wait a moment and try again.");
+        return;
+      }
+      socket.emit("message:send", {
+        receiverId: activeUser.id,
+        type: "image",
+        content: JSON.stringify({ url, filename: "doodle.png" }),
+        burnAfter: burnMode ? BURN_DURATION_MS : null,
+        unlockAt: computeUnlockAt(),
+      });
+      setShowDoodle(false);
+    } catch (err) {
+      console.error("Doodle send failed", err);
+      alert("Couldn't send doodle. Please try again.");
+    } finally {
+      setSendingDoodle(false);
+    }
   };
 
   const handleFileUpload = async (e) => {
@@ -860,6 +890,14 @@ export default function Chat() {
               </div>
             )}
 
+            {showDoodle && (
+              <DoodleCanvas
+                onSend={handleDoodleSend}
+                onClose={() => setShowDoodle(false)}
+                sending={sendingDoodle}
+              />
+            )}
+
             <div className="message-input">
               <button onClick={() => setShowStickers((s) => !s)} title="Stickers">
                 😀
@@ -872,6 +910,9 @@ export default function Chat() {
               />
               <button onClick={() => fileInputRef.current?.click()} disabled={uploading} title="Attach file">
                 📎
+              </button>
+              <button onClick={() => setShowDoodle(true)} title="Doodle">
+                🎨
               </button>
               {replyTarget && (
                 <VoiceRecorder onRecorded={handleVoiceReply} onCancel={() => setReplyTarget(null)} />
