@@ -1,0 +1,42 @@
+:root {
+  --bg: #fff5f6;
+  --bg-secondary: #ffe3e8;
+  --text: #4a1620;
+  --bubble-me: #ff4d6d;
+  --bubble-them: #ffffff;
+  --bubble-me-text: #ffffff;
+  --bubble-them-text: #4a1620;
+  --accent: #ff4d6d;
+  --accent-soft: #ffc2cc;
+  --border: #ffb3c0;
+}
+
+[data-theme="dark"] {
+  --bg: #1a0d10;
+  --bg-secondary: #2b1218;
+  --text: #ffe3e8;
+  --bubble-me: #ff4d6d;
+  --bubble-them: #3a1a20;
+  --bubble-me-text: #ffffff;
+  --bubble-them-text: #ffe3e8;
+  --accent: #ff6b81;
+  --accent-soft: #4a1620;
+  --border: #4a1620;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.bubble-me {
+  background: var(--bubble-me);
+  color: var(--bubble-me-text);
+}
+
+.bubble-them {
+  background: var(--bubble-them);
+  color: var(--bubble-them-text);
+  border: 1px solid var(--border);
+}

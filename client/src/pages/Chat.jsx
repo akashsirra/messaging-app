@@ -7,6 +7,7 @@ import CallWindow from "../CallWindow";
 import { getMoodScore, moodToColors } from "../utils/mood";
 import VoiceRecorder from "../VoiceRecorder";
 import "./Chat.css";
+import ThemeToggle from "../ThemeToggle";
 
 const STICKERS = ["😀", "😂", "😍", "😎", "🥳", " 😢", "😮", "🔥", "👍", "👎", "❤️", "🎉", "🙏", "👋", "🤔", "💀"];
 
@@ -451,6 +452,7 @@ export default function Chat() {
       <aside className="user-list">
         <div className="sidebar-header">
           <h3>Chats</h3>
+          <ThemeToggle />
           <button className="logout-btn" onClick={handleLogout}>
             Logout
           </button>
@@ -634,7 +636,7 @@ export default function Chat() {
                       </div>
                     )}
                     <div className="message-col">
-                      <div className={`message ${isMine ? "sent" : "received"} ${isBurning ? "burning" : ""}`} onTouchStart={() => { longPressTimer.current = setTimeout(() => setReplyTarget(m), 500); }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onMouseDown={() => { longPressTimer.current = setTimeout(() => setReplyTarget(m), 500); }} onMouseUp={() => clearTimeout(longPressTimer.current)} onContextMenu={(e) => e.preventDefault()}>
+                      <div className={`message ${isMine ? "sent bubble-me" : "received bubble-them"} ${isBurning ? "burning" : ""}`} onTouchStart={() => { longPressTimer.current = setTimeout(() => setReplyTarget(m), 500); }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onMouseDown={() => { longPressTimer.current = setTimeout(() => setReplyTarget(m), 500); }} onMouseUp={() => clearTimeout(longPressTimer.current)} onContextMenu={(e) => e.preventDefault()}>
                         {isLockedCapsule ? (
                           <span style={{ opacity: 0.75 }}>
                             🔒 Time Capsule — {capsuleCountdown(m.unlock_at, now)}
