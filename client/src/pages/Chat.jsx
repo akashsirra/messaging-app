@@ -145,6 +145,7 @@ export default function Chat() {
   const [otherTyping, setOtherTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
   const [sendBurst, setSendBurst] = useState(0);
+  const [missYouToast, setMissYouToast] = useState(null);
   const [newContactName, setNewContactName] = useState("");
   const [addContactError, setAddContactError] = useState("");
   const [addingContact, setAddingContact] = useState(false);
@@ -200,6 +201,11 @@ export default function Chat() {
       if (activeUserRef.current && activeUserRef.current.id === from) {
         setOtherTyping(true);
       }
+    });
+
+    socket.on("missyou:received", ({ senderName }) => {
+      setMissYouToast(senderName || "They");
+      setTimeout(() => setMissYouToast(null), 4000);
     });
 
     socket.on("typing:stop", ({ from }) => {
@@ -285,6 +291,7 @@ export default function Chat() {
       socket.off("presence:update");
       socket.off("typing:start");
       socket.off("typing:stop");
+      socket.off("missyou:received");
       socket.off("message:new");
       socket.off("capsule:incoming");
       socket.off("capsule:unlocked");
@@ -445,6 +452,11 @@ export default function Chat() {
     }
   };
 
+  const handleMissYou = () => {
+    if (!activeUser) return;
+    getSocket()?.emit("missyou:send", { receiverId: activeUser.id });
+  };
+
   const handleDeleteChat = () => {
     if (!activeUser) return;
     if (!window.confirm(`Delete this entire chat with ${activeUser.username}? This can't be undone.`)) {
@@ -471,6 +483,9 @@ export default function Chat() {
 
   return (
     <div className={`chat-page ${activeUser ? "chat-open" : ""}`}>
+      {missYouToast && (
+        <div className="missyou-toast">{missYouToast} misses you 🥺❤️</div>
+      )}
       <aside className="user-list">
         <div className="sidebar-header">
           <h3>Chats</h3>
@@ -560,6 +575,13 @@ export default function Chat() {
                   </span>
                 </div>
               </div>
+              <button
+                className="burn-toggle"
+                onClick={handleMissYou}
+                title="Send a Miss You ping"
+              >
+                🥺
+              </button>
               <button
                 className={`burn-toggle ${burnMode ? "active" : ""}`}
                 onClick={() => setBurnMode((b) => !b)}

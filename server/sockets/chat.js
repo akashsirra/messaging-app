@@ -231,6 +231,26 @@ export function setupChatSocket(io) {
       }
     });
 
+    socket.on("missyou:send", async ({ receiverId }) => {
+      const senderResult = await db.query(
+        "SELECT username FROM users WHERE id = $1",
+        [userId]
+      );
+      const sender = senderResult.rows[0];
+
+      const receiverSocketId = onlineUsers.get(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("missyou:received", { from: userId, senderName: sender?.username });
+      }
+
+      sendPushToUser(receiverId, {
+        title: sender?.username || "Someone",
+        body: "misses you 🥺❤️",
+        senderId: userId,
+        senderName: sender?.username,
+      }).catch((err) => console.error("Miss you push error:", err));
+    });
+
     socket.on("chat:delete", async ({ otherUserId }) => {
       await db.query(
         `DELETE FROM messages
