@@ -223,13 +223,13 @@ export default function Chat() {
     const socket = connectSocket();
 
     socket.on("connect_error", (err) => {
-      document.body.innerHTML = "<div style=\"background:red;color:white;padding:20px;font-size:14px;white-space:pre-wrap;\">SOCKET CONNECT ERROR: " + err.message + "</div>" + document.body.innerHTML;
+      document.body.insertAdjacentHTML("afterbegin", "<div style=\"background:red;color:white;padding:20px;font-size:14px;white-space:pre-wrap;\">SOCKET CONNECT ERROR: " + err.message + "</div>");
     });
     socket.on("disconnect", (reason) => {
-      document.body.innerHTML = "<div style=\"background:orange;color:black;padding:20px;font-size:14px;white-space:pre-wrap;\">SOCKET DISCONNECTED: " + reason + "</div>" + document.body.innerHTML;
+      document.body.insertAdjacentHTML("afterbegin", "<div style=\"background:orange;color:black;padding:20px;font-size:14px;white-space:pre-wrap;\">SOCKET DISCONNECTED: " + reason + "</div>");
     });
     socket.on("connect", () => {
-      document.body.innerHTML = "<div style=\"background:green;color:white;padding:20px;font-size:14px;white-space:pre-wrap;\">SOCKET CONNECTED, id=" + socket.id + "</div>" + document.body.innerHTML;
+      document.body.insertAdjacentHTML("afterbegin", "<div style=\"background:green;color:white;padding:20px;font-size:14px;white-space:pre-wrap;\">SOCKET CONNECTED, id=" + socket.id + "</div>");
     });
 
     socket.on("presence:update", (ids) => setOnlineIds(ids));
