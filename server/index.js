@@ -31,6 +31,10 @@ const io = new Server(httpServer, {
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/upload", uploadRoutes);
