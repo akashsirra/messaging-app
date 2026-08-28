@@ -142,6 +142,8 @@ export default function Chat() {
   const [burnMode, setBurnMode] = useState(false);
   const [expiringIds, setExpiringIds] = useState([]);
   const [now, setNow] = useState(Date.now());
+  const [otherTyping, setOtherTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
   const [newContactName, setNewContactName] = useState("");
   const [addContactError, setAddContactError] = useState("");
   const [addingContact, setAddingContact] = useState(false);
@@ -192,6 +194,18 @@ export default function Chat() {
     const socket = connectSocket();
 
     socket.on("presence:update", (ids) => setOnlineIds(ids));
+
+    socket.on("typing:start", ({ from }) => {
+      if (activeUserRef.current && activeUserRef.current.id === from) {
+        setOtherTyping(true);
+      }
+    });
+
+    socket.on("typing:stop", ({ from }) => {
+      if (activeUserRef.current && activeUserRef.current.id === from) {
+        setOtherTyping(false);
+      }
+    });
 
     socket.on("message:new", (msg) => {
       const openUser = activeUserRef.current;
@@ -268,6 +282,8 @@ export default function Chat() {
 
     return () => {
       socket.off("presence:update");
+      socket.off("typing:start");
+      socket.off("typing:stop");
       socket.off("message:new");
       socket.off("capsule:incoming");
       socket.off("capsule:unlocked");
@@ -298,6 +314,10 @@ export default function Chat() {
       window.history.replaceState({}, "", "/");
     }
   }, [loadingUsers, users]);
+
+  useEffect(() => {
+    setOtherTyping(false);
+  }, [activeUser]);
 
   useEffect(() => {
     if (!activeUser) return;
@@ -669,6 +689,12 @@ export default function Chat() {
               <div ref={bottomRef} />
             </div>
 
+            {otherTyping && (
+              <div className="typing-indicator">
+                <span>❤️</span><span>❤️</span><span>❤️</span>
+              </div>
+            )}
+
             {showStickers && (
               <div className="sticker-picker">
                 {STICKERS.map((s) => (
@@ -698,7 +724,16 @@ export default function Chat() {
               <input
                 type="text"
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  const socket = getSocket();
+                  if (!socket || !activeUser) return;
+                  socket.emit("typing:start", { receiverId: activeUser.id });
+                  clearTimeout(typingTimeoutRef.current);
+                  typingTimeoutRef.current = setTimeout(() => {
+                    socket.emit("typing:stop", { receiverId: activeUser.id });
+                  }, 1500);
+                }}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
                 placeholder="Type a message..."
               />

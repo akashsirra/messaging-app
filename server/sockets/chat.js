@@ -170,6 +170,20 @@ export function setupChatSocket(io) {
       }
     });
 
+    socket.on("typing:start", ({ receiverId }) => {
+      const receiverSocketId = onlineUsers.get(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("typing:start", { from: userId });
+      }
+    });
+
+    socket.on("typing:stop", ({ receiverId }) => {
+      const receiverSocketId = onlineUsers.get(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("typing:stop", { from: userId });
+      }
+    });
+
   socket.on("call:offer", async ({ receiverId, offer }) => {
     const receiverSocketId = onlineUsers.get(receiverId);
     if (receiverSocketId) {
