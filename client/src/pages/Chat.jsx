@@ -215,6 +215,10 @@ export default function Chat() {
     });
 
     socket.on("message:new", (msg) => {
+      if (msg.sender_id !== me.id) {
+        const audio = new Audio("/sounds/notify.wav");
+        audio.play().catch(() => {});
+      }
       const openUser = activeUserRef.current;
       const belongsToOpenChat =
         openUser && (msg.sender_id === openUser.id || msg.receiver_id === openUser.id);
