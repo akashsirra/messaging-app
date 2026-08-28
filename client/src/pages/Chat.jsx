@@ -178,6 +178,7 @@ export default function Chat() {
   const [showCapsuleMenu, setShowCapsuleMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [actionMenuFor, setActionMenuFor] = useState(null);
+  const wasLongPressRef = useRef(false);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
@@ -786,7 +787,7 @@ export default function Chat() {
                       </div>
                     )}
                     <div className="message-col">
-                      <div className={`message ${isMine ? "sent bubble-me" : "received bubble-them"} ${isBurning ? "burning" : ""}`} onTouchStart={() => { longPressTimer.current = setTimeout(() => setActionMenuFor(m.id), 500); }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onMouseDown={() => { longPressTimer.current = setTimeout(() => setActionMenuFor(m.id), 500); }} onMouseUp={() => clearTimeout(longPressTimer.current)} onContextMenu={(e) => e.preventDefault()}>
+                      <div className={`message ${isMine ? "sent bubble-me" : "received bubble-them"} ${isBurning ? "burning" : ""}`} onTouchStart={() => { wasLongPressRef.current = false; longPressTimer.current = setTimeout(() => { wasLongPressRef.current = true; setActionMenuFor(m.id); }, 500); }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onMouseDown={() => { wasLongPressRef.current = false; longPressTimer.current = setTimeout(() => { wasLongPressRef.current = true; setActionMenuFor(m.id); }, 500); }} onMouseUp={() => clearTimeout(longPressTimer.current)} onContextMenu={(e) => e.preventDefault()} onClick={() => { if (!wasLongPressRef.current) { setReplyTarget(m); } }}>
                         {isLockedCapsule ? (
                           <span style={{ opacity: 0.75 }}>
                             🔒 Time Capsule — {capsuleCountdown(m.unlock_at, now)}
