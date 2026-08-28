@@ -7,6 +7,9 @@ import CallWindow from "../CallWindow";
 import { getMoodScore, moodToColors } from "../utils/mood";
 import VoiceRecorder from "../VoiceRecorder";
 import DoodleCanvas from "../DoodleCanvas";
+
+const REACT_EMOJIS = ["🍄", "❤️", "😘", "😂", "😮", "😢"];
+const DOUBLE_TAP_EMOJI = "🍄";
 import "./Chat.css";
 import ThemeToggle from "../ThemeToggle";
 
@@ -182,6 +185,8 @@ export default function Chat() {
   const wasLongPressRef = useRef(false);
   const [showDoodle, setShowDoodle] = useState(false);
   const [sendingDoodle, setSendingDoodle] = useState(false);
+  const [reactPickerFor, setReactPickerFor] = useState(null);
+  const lastTapRef = useRef({ id: null, time: 0 });
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const activeUserRef = useRef(null);
@@ -235,6 +240,10 @@ export default function Chat() {
     });
 
     socket.on("message:edited", (msg) => {
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+    });
+
+    socket.on("message:reacted", (msg) => {
       setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
     });
 
@@ -425,6 +434,17 @@ export default function Chat() {
       unlockAt: computeUnlockAt(),
     });
     setShowStickers(false);
+  };
+
+  const handleReact = (m, emoji) => {
+    const socket = getSocket();
+    if (!socket || !socket.connected) {
+      alert("Not connected to server. Please wait a moment and try again.");
+      return;
+    }
+    socket.emit("message:react", { messageId: m.id, emoji });
+    setReactPickerFor(null);
+    setActionMenuFor(null);
   };
 
   const handleDoodleSend = async (blob) => {
@@ -817,7 +837,21 @@ export default function Chat() {
                       </div>
                     )}
                     <div className="message-col">
-                      <div className={`message ${isMine ? "sent bubble-me" : "received bubble-them"} ${isBurning ? "burning" : ""}`} onTouchStart={() => { wasLongPressRef.current = false; longPressTimer.current = setTimeout(() => { wasLongPressRef.current = true; setActionMenuFor(m.id); }, 500); }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onMouseDown={() => { wasLongPressRef.current = false; longPressTimer.current = setTimeout(() => { wasLongPressRef.current = true; setActionMenuFor(m.id); }, 500); }} onMouseUp={() => clearTimeout(longPressTimer.current)} onContextMenu={(e) => e.preventDefault()} onClick={() => { if (!wasLongPressRef.current) { setReplyTarget(m); } }}>
+                      <div className={`message ${isMine ? "sent bubble-me" : "received bubble-them"} ${isBurning ? "burning" : ""}`} onTouchStart={() => { wasLongPressRef.current = false; longPressTimer.current = setTimeout(() => { wasLongPressRef.current = true; setActionMenuFor(m.id); }, 500); }} onTouchEnd={() => clearTimeout(longPressTimer.current)} onMouseDown={() => { wasLongPressRef.current = false; longPressTimer.current = setTimeout(() => { wasLongPressRef.current = true; setActionMenuFor(m.id); }, 500); }} onMouseUp={() => clearTimeout(longPressTimer.current)} onContextMenu={(e) => e.preventDefault()} onClick={() => {
+                        if (wasLongPressRef.current) return;
+                        const now2 = Date.now();
+                        if (lastTapRef.current.id === m.id && now2 - lastTapRef.current.time < 300) {
+                          handleReact(m, DOUBLE_TAP_EMOJI);
+                          lastTapRef.current = { id: null, time: 0 };
+                        } else {
+                          lastTapRef.current = { id: m.id, time: now2 };
+                          setTimeout(() => {
+                            if (lastTapRef.current.id === m.id && Date.now() - lastTapRef.current.time >= 300) {
+                              setReplyTarget(m);
+                            }
+                          }, 300);
+                        }
+                      }}>
                         {isLockedCapsule ? (
                           <span style={{ opacity: 0.75 }}>
                             🔒 Time Capsule — {capsuleCountdown(m.unlock_at, now)}
@@ -830,8 +864,27 @@ export default function Chat() {
                         )}
                         {m.edited && <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 6 }}>(edited)</span>}
                       </div>
+                      {m.reactions && Object.keys(m.reactions).length > 0 && (
+                        <div style={{ display: "flex", gap: 2, marginTop: 2, fontSize: 14 }}>
+                          {Object.values(m.reactions).map((e, i) => (
+                            <span key={i}>{e}</span>
+                          ))}
+                        </div>
+                      )}
                       {actionMenuFor === m.id && (
                         <div className="sticker-picker" style={{ position: "static", marginTop: 4 }}>
+                          <div className="more-menu-item" onClick={() => setReactPickerFor(reactPickerFor === m.id ? null : m.id)}>
+                            😊 React
+                          </div>
+                          {reactPickerFor === m.id && (
+                            <div style={{ display: "flex", gap: 8, padding: "6px 12px" }}>
+                              {REACT_EMOJIS.map((e) => (
+                                <span key={e} style={{ fontSize: 20, cursor: "pointer" }} onClick={() => handleReact(m, e)}>
+                                  {e}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           <div className="more-menu-item" onClick={() => { setReplyTarget(m); setActionMenuFor(null); }}>
                             ↩️ Reply
                           </div>

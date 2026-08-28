@@ -200,6 +200,36 @@ export function setupChatSocket(io) {
       socket.emit("message:unsent", { id: messageId });
     });
 
+    socket.on("message:react", async ({ messageId, emoji }) => {
+      const msgResult = await db.query(
+        `SELECT * FROM messages WHERE id = $1 AND (sender_id = $2 OR receiver_id = $2)`,
+        [messageId, userId]
+      );
+      const message = msgResult.rows[0];
+      if (!message) return;
+
+      const currentReactions = message.reactions || {};
+      const updatedReactions = { ...currentReactions };
+      if (updatedReactions[userId] === emoji) {
+        delete updatedReactions[userId];
+      } else {
+        updatedReactions[userId] = emoji;
+      }
+
+      const result = await db.query(
+        `UPDATE messages SET reactions = $1 WHERE id = $2 RETURNING *`,
+        [JSON.stringify(updatedReactions), messageId]
+      );
+      const updated = result.rows[0];
+
+      const otherUserId = message.sender_id === userId ? message.receiver_id : message.sender_id;
+      socket.emit("message:reacted", updated);
+      const otherSocketId = onlineUsers.get(otherUserId);
+      if (otherSocketId) {
+        io.to(otherSocketId).emit("message:reacted", updated);
+      }
+    });
+
     socket.on("message:seen", async ({ otherUserId }) => {
       await db.query(
         `UPDATE messages SET seen = true
