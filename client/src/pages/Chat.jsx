@@ -144,6 +144,7 @@ export default function Chat() {
   const [now, setNow] = useState(Date.now());
   const [otherTyping, setOtherTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
+  const [sendBurst, setSendBurst] = useState(0);
   const [newContactName, setNewContactName] = useState("");
   const [addContactError, setAddContactError] = useState("");
   const [addingContact, setAddingContact] = useState(false);
@@ -349,6 +350,7 @@ export default function Chat() {
       unlockAt: computeUnlockAt(),
     });
     setDraft("");
+    setSendBurst((b) => b + 1);
   };
 
   const handleStickerPick = (emoji) => {
@@ -737,9 +739,16 @@ export default function Chat() {
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
                 placeholder="Type a message..."
               />
-              <button onClick={handleSend} disabled={!draft.trim()}>
-                Send
-              </button>
+              <span className="send-btn-wrap">
+                <button onClick={handleSend} disabled={!draft.trim()}>
+                  Send
+                </button>
+                {sendBurst > 0 && (
+                  <span className="heart-burst" key={sendBurst}>
+                    <span>❤️</span><span>❤️</span><span>❤️</span>
+                  </span>
+                )}
+              </span>
             </div>
           </>
         )}
