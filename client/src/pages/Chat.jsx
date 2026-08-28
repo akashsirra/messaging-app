@@ -147,6 +147,30 @@ export default function Chat() {
   const [sendBurst, setSendBurst] = useState(0);
   const [missYouToast, setMissYouToast] = useState(null);
   const [kissBurst, setKissBurst] = useState(0);
+  const [petNames, setPetNames] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("petNames") || "{}");
+    } catch {
+      return {};
+    }
+  });
+
+  const getDisplayName = (user) => (user && petNames[user.id]) || user?.username || "";
+
+  const handleEditPetName = (user) => {
+    if (!user) return;
+    const current = petNames[user.id] || "";
+    const input = window.prompt(`Set a pet name for ${user.username} (leave blank to remove):`, current);
+    if (input === null) return;
+    const updated = { ...petNames };
+    if (input.trim()) {
+      updated[user.id] = input.trim();
+    } else {
+      delete updated[user.id];
+    }
+    setPetNames(updated);
+    localStorage.setItem("petNames", JSON.stringify(updated));
+  };
   const [newContactName, setNewContactName] = useState("");
   const [addContactError, setAddContactError] = useState("");
   const [addingContact, setAddingContact] = useState(false);
@@ -563,7 +587,7 @@ export default function Chat() {
                   {initial(u.username)}
                 </div>
                 <div className="user-item-info">
-                  <span className="user-item-name">{u.username}</span>
+                  <span className="user-item-name">{getDisplayName(u)}</span>
                   <span className="user-item-status">
                     {activityLabel(isOnline, u.last_active, now)}
                   </span>
@@ -603,7 +627,14 @@ export default function Chat() {
                   {initial(activeUser.username)}
                 </div>
                 <div>
-                  <span className="chat-header-name">{activeUser.username}</span>
+                  <span
+                    className="chat-header-name"
+                    onClick={() => handleEditPetName(activeUser)}
+                    style={{ cursor: "pointer" }}
+                    title="Tap to set a pet name"
+                  >
+                    {getDisplayName(activeUser)} ✏️
+                  </span>
                   <span className="chat-header-status">
                     {activityLabel(onlineIds.includes(activeUser.id), activeUser.last_active, now)}
                   </span>
