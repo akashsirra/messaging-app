@@ -222,13 +222,6 @@ export default function Chat() {
 
     const socket = connectSocket();
 
-    socket.on("connect", () => {
-      document.body.insertAdjacentHTML("afterbegin", "<div style=\"background:green;color:white;padding:10px;font-size:12px;\">CONNECTED " + socket.id + "</div>");
-    });
-    socket.on("disconnect", (r) => {
-      document.body.insertAdjacentHTML("afterbegin", "<div style=\"background:orange;color:black;padding:10px;font-size:12px;\">DISCONNECTED " + r + "</div>");
-    });
-
     socket.on("presence:update", (ids) => setOnlineIds(ids));
 
     socket.on("typing:start", ({ from }) => {
