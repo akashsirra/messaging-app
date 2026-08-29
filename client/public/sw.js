@@ -1,24 +1,24 @@
 // Runs in the background, separate from the page - this is what lets a
-// notification show up even when the Themartiane tab isn't open or focused.
+// notification show up even when the DAMN Messaging tab isn't open or focused.
 
 self.addEventListener("push", (event) => {
   let data = {};
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: "Themartiane", body: event.data?.text() || "New message" };
+    data = { title: "DAMN Messaging", body: event.data?.text() || "New message" };
   }
 
   const isCall = data.type === "call";
 
   const title = isCall
     ? `\u{1F4DE} ${data.title || "Incoming call"}`
-    : (data.title || "Themartiane");
+    : (data.title || "DAMN Messaging");
 
   const options = {
     body: data.body || "New message",
     // icon: "/icon-192.png", // add an icon file here later and uncomment
-    tag: data.senderId ? `themartiane-${data.senderId}` : undefined,
+    tag: data.senderId ? `damn-messaging-${data.senderId}` : undefined,
     renotify: true,
     requireInteraction: isCall,
     data: { senderId: data.senderId, senderName: data.senderName, type: data.type },
@@ -27,7 +27,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Clicking the notification focuses an existing Themartiane tab if one is open,
+// Clicking the notification focuses an existing DAMN Messaging tab if one is open,
 // otherwise opens a new one. Call notifications go straight into that chat.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

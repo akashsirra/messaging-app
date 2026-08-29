@@ -1,4 +1,4 @@
-# Whisper — Phase 1
+# DAMN Messaging 💬
 
 A self-hosted, real-time 1:1 messaging app. This phase covers: register/login,
 online presence, and real-time text messaging. Media, stickers, and calls come
