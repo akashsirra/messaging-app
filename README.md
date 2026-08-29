@@ -1,8 +1,44 @@
 # DAMN Messaging 💬
 
-A self-hosted, real-time 1:1 messaging app. This phase covers: register/login,
+A self-hosted, real-time 1-to-1 messaging application built for people who want control over their own chat infrastructure. This phase covers: register/login,
 online presence, and real-time text messaging. Media, stickers, and calls come
 in later phases.
+
+
+## ✨ Features
+
+- 🔐 User registration and login
+- 💬 Real-time 1-to-1 messaging
+- 🟢 Online presence
+- ❤️ Message reactions
+- 🔔 Push notifications
+- 🗄️ Self-hosted SQLite storage
+- 🔑 JWT authentication
+- 🔒 Password hashing
+- 📱 Responsive web interface
+
+## 🛠️ Tech Stack
+
+- **Frontend:** React + Vite
+- **Backend:** Node.js + Express + Socket.io
+- **Database:** SQLite
+- **Authentication:** JWT + bcrypt
+
+
+## 🗺️ Roadmap
+
+- [x] Authentication
+- [x] Real-time messaging
+- [x] Online presence
+- [x] Message reactions
+- [x] Push notifications
+- [ ] Media and file sharing
+- [ ] Sticker support
+- [ ] Voice/video calls with WebRTC
+- [ ] Better mobile experience
+- [ ] Automated tests and CI
+- [ ] Production deployment guide
+- [ ] End-to-end encryption
 
 ## How it works
 
@@ -11,6 +47,34 @@ in later phases.
   single local file — delete it anytime to reset the app.
 - **client/** — React (Vite). Talks to the server over REST (for
   login/history) and Socket.io (for live messages).
+
+## 🌐 Live Demo
+
+Try the deployed web app:
+
+**https://messaging-app-seven-kohl.vercel.app**
+
+> The live demo may be updated or unavailable while new features are being developed.
+
+## 🤝 Contributing
+
+Contributions, bug reports and feature requests are welcome.
+
+Good places to start:
+
+- Fix bugs
+- Improve documentation
+- Improve accessibility and mobile UX
+- Add automated tests
+- Build roadmap features
+
+Please open an issue before starting a large change so we can discuss the approach.
+
+## ⭐ Support
+
+If you find DAMN Messaging useful, **star the repository** — it helps other developers discover the project.
+
+You can also contribute code, report bugs, request features, or support future development through available sponsorship options.
 
 ## Run it
 
