@@ -13,7 +13,11 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
     VAPID_PRIVATE_KEY
   );
 } else {
-  console.warn("VAPID keys not set — push notifications are disabled.");
+  console.warn(
+    "VAPID keys are missing — push notifications are disabled. " +
+      "Run `npx web-push generate-vapid-keys` and add them to server/.env"
+  );
 }
 
 export default webpush;
+export { VAPID_PUBLIC_KEY };
